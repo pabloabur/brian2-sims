@@ -2,6 +2,8 @@ from brian2 import implementation, check_units, ms, declare_types,\
         SpikeMonitor, Network, NeuronGroup, TimedArray, Function,\
         DEFAULT_FUNCTIONS
 import numpy as np
+import os
+current_dir = os.path.abspath(os.path.dirname(__file__))
 
 # Parameters for 8-bit floating point implementation
 EXP_WIDTH = 4
@@ -299,6 +301,11 @@ def minifloat2decimal(bitstring):
     return dec_val*signal
 
 
+@implementation('cpp', '// implementation of multiplication',
+                sources=[os.path.join(current_dir, 'fp8_multiply.cpp')],
+                headers=['"fp8_multiply.h"'],
+                include_dirs=[current_dir]
+                )
 def fp8_multiply(num1, num2, _vectorisation_idx):
     """ Implements an 8-bit floating point multiplication scheme.
 
@@ -386,6 +393,11 @@ fp8_multiply = Function(fp8_multiply, arg_units=[1, 1],
     return_unit=1, auto_vectorise=True)
 
 
+@implementation('cpp', '// implementation of addition',
+                sources=[os.path.join(current_dir, 'fp8_add.cpp')],
+                headers=['"fp8_add.h"'],
+                include_dirs=[current_dir]
+                )
 def fp8_add(num1, num2, _vectorisation_idx):
     """ Implements an 8-bit floating point addition scheme. This function was
         created to be used in an "on_pre" statement that will increment a
@@ -507,6 +519,11 @@ def fp8_add(num1, num2, _vectorisation_idx):
 fp8_add = Function(fp8_add, arg_units=[1, 1], return_unit=1,
     auto_vectorise=True)
 
+@implementation('cpp', '// implementation of comparison',
+                sources=[os.path.join(current_dir, 'fp8_smaller_than.cpp')],
+                headers=['"fp8_smaller_than.h"'],
+                include_dirs=[current_dir]
+                )
 def fp8_smaller_than(num1, num2, _vectorisation_idx):
     if isinstance(_vectorisation_idx, int):
         unpack = True

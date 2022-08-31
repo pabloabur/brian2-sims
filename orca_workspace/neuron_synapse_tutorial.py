@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-from pyqtgraph.Qt import QtGui
-import pyqtgraph as pg
 import numpy as np
 import sys
 from brian2 import mV, uA, mA, ms, ohm, second, pA, nA, prefs,\
@@ -10,19 +8,14 @@ from brian2 import mV, uA, mA, ms, ohm, second, pA, nA, prefs,\
 from brian2tools import plot_state, brian_plot
 import matplotlib.pyplot as plt
 
-from teili.tools.misc import decimal2minifloat, minifloat2decimal
-from teili.tools.misc import DEFAULT_FUNCTIONS
-from teili.tools.visualizer.DataModels import StateVariablesModel
+from utils.misc import decimal2minifloat, minifloat2decimal
+from utils.misc import DEFAULT_FUNCTIONS
 
 from equations.neurons.LIF import LIF
 from equations.synapses.CUBA import CUBA
 from equations.neurons.fp8LIF import fp8LIF
 from equations.synapses.fp8CUBA import fp8CUBA
 from builder.groups_builder import create_synapses, create_neurons
-
-from teili.tools.visualizer.DataViewers import PlotSettings
-from teili.tools.visualizer.DataControllers import Rasterplot, Lineplot
-from teili.tools.lfsr import create_lfsr
 
 prefs.codegen.target = "numpy"
 #set_device('cpp_standalone')
@@ -91,16 +84,6 @@ if 'stochastic_decay' in sim_type:
     test_neurons2.g_psc = 2 * ohm
     syn_variables = 'I'
 
-if 'lfsr' in sim_type:
-        num_bits = 4
-        test_neurons1.rand_num_bits = num_bits
-        test_neurons2.rand_num_bits = num_bits
-if 'lfsr' in sim_type:
-        num_bits = 4
-        input_synapse.rand_num_bits_syn = num_bits
-        test_synapse.rand_num_bits_syn = num_bits
-        ta = create_lfsr([test_neurons1, test_neurons2], [input_synapse, test_synapse], defaultclock.dt)
-
 # Monitoring standard models
 spikemon_input = SpikeMonitor(input_spikegenerator)
 spikemon_test_neurons2 = SpikeMonitor(test_neurons2)
@@ -163,118 +146,39 @@ plot_state(statemon_test_neurons4.t,
 fig.suptitle('8-bit floating point neuron')
 plt.pause(0.001)
 
-# Visualize simulation results
-app = QtGui.QApplication.instance()
-if app is None:
-    app = QtGui.QApplication(sys.argv)
-else:
-    print('QApplication instance already exists: %s' % str(app))
+fig, axs = plt.subplots(3, 2, sharex=True)
 
-pg.setConfigOptions(antialias=True)
-labelStyle = {'color': '#FFF', 'font-size': 12}
-MyPlotSettings = PlotSettings(fontsize_title=labelStyle['font-size'],
-                              fontsize_legend=labelStyle['font-size'],
-                              fontsize_axis_labels=10,
-                              marker_size=7)
+axs[0, 0].title.set_text('input spikes')
+brian_plot(spikemon_input, axes=axs[0, 0])
 
-win = pg.GraphicsWindow()
-win.resize(2100, 1200)
-win.setWindowTitle('Simple Spiking Neural Network')
+axs[0, 1].title.set_text('PSCs on 1st layer')
+plot_state(statemon_input_synapse.t,
+           statemon_input_synapse.gtot[0],
+           var_name='gtot', axes=axs[0, 1])
+plot_state(statemon_input_synapse.t,
+           statemon_input_synapse.gtot[1],
+           var_name='gtot', axes=axs[0, 1])
 
-p1 = win.addPlot(title="Input spike generator")
-p2 = win.addPlot(title="Input synapses")
-win.nextRow()
-p3 = win.addPlot(title='Intermediate test neurons 1')
-p4 = win.addPlot(title="Test synapses")
-win.nextRow()
-p5 = win.addPlot(title="Rasterplot of output test neurons 2")
-p6 = win.addPlot(title="Output test neurons 2")
+axs[1, 0].title.set_text('Vm on 1st layer')
+plot_state(statemon_test_neurons1.t,
+           statemon_test_neurons1.Vm[0],
+           var_name='Vm', axes=axs[1, 0])
 
+axs[1, 1].title.set_text('PSCs on 2nd layer')
+plot_state(statemon_test_neurons2.t,
+           statemon_test_neurons2.gtot[0],
+           var_name='gtot', axes=axs[1, 1])
 
-# Spike generator
-Rasterplot(MyEventsModels=[spikemon_input],
-           MyPlotSettings=MyPlotSettings,
-           time_range=[0, duration],
-           neuron_id_range=None,
-           title="Input spike generator",
-           xlabel='Time (ms)',
-           ylabel="Neuron ID",
-           backend='pyqtgraph',
-           mainfig=win,
-           subfig_rasterplot=p1,
-           QtApp=app,
-           show_immediately=False)
+axs[2, 0].title.set_text('spikes on 2nd layer')
+brian_plot(spikemon_test_neurons2, axes=axs[2, 0])
 
-# Input synapses
-data = [(statemon_input_synapse, ('t', 'gtot'))]
-Lineplot(DataModel_to_x_and_y_attr=data,
-         MyPlotSettings=MyPlotSettings,
-         x_range=[0, duration],
-         title="Input synapses",
-         xlabel="Time (ms)",
-         ylabel="EPSC (A)",
-         backend='pyqtgraph',
-         mainfig=win,
-         subfig=p2,
-         QtApp=app,
-         show_immediately=False)
+axs[2, 1].title.set_text('Vm on 2nd layer')
+plot_state(statemon_test_neurons2.t,
+           statemon_test_neurons2.Vm[0],
+           var_name='Vm', axes=axs[2, 1])
 
-# Intermediate neurons
-MyData_intermed_neurons = [(statemon_test_neurons1, ('t', 'Vm'))]
-Lineplot(DataModel_to_x_and_y_attr=MyData_intermed_neurons,
-         MyPlotSettings=MyPlotSettings,
-         x_range=[0, duration],
-         title='Intermediate test neurons 1',
-         xlabel="Time (ms)",
-         ylabel='Vm',
-         backend='pyqtgraph',
-         mainfig=win,
-         subfig=p3,
-         QtApp=app,
-         show_immediately=False)
-
-# Output synapses
-data = [(statemon_test_neurons2, ('t', 'gtot'))]
-Lineplot(DataModel_to_x_and_y_attr=data,
-         MyPlotSettings=MyPlotSettings,
-         x_range=[0, duration],
-         title="Test synapses",
-         xlabel="Time (ms)",
-         ylabel="EPSC (A)",
-         backend='pyqtgraph',
-         mainfig=win,
-         subfig=p4,
-         QtApp=app,
-         show_immediately=False)
-
-
-Rasterplot(MyEventsModels=[spikemon_test_neurons2],
-           MyPlotSettings=MyPlotSettings,
-           time_range=[0, duration],
-           neuron_id_range=None,
-           title="Rasterplot of output test neurons 2",
-           xlabel='Time (ms)',
-           ylabel="Neuron ID",
-           backend='pyqtgraph',
-           mainfig=win,
-           subfig_rasterplot=p5,
-           QtApp=app,
-           show_immediately=False)
-
-MyData_output = [(statemon_test_neurons2, ('t', 'Vm'))]
-Lineplot(DataModel_to_x_and_y_attr=MyData_output,
-         MyPlotSettings=MyPlotSettings,
-         x_range=[0, duration],
-         title="Output test neurons 2",
-         xlabel="Time (ms)",
-         ylabel="Vm",
-         backend='pyqtgraph',
-         mainfig=win,
-         subfig=p6,
-         QtApp=app,
-         show_immediately=False)
-
-app.exec()
+fig.suptitle('full precision neuron')
+plt.pause(0.001)
 
 """ profiling shows that FP8 model is around 20 times slower """
 profiling_summary(show=15)
