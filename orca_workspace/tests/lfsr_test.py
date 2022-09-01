@@ -1,3 +1,4 @@
+"""
 from brian2 import *
 from lfsr import create_lfsr
 
@@ -28,3 +29,5 @@ print(mon.v[0])
 print(mon.v[1])
 print(mon.v[2])
 print(mon.v[3])
+"""
+pass
