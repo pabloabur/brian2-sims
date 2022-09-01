@@ -4,7 +4,6 @@ Created on Thu Feb 3 7:28:46 2022
 @author: pablo
 """
 import unittest
-from teili.tools.misc import fp8_multiply, fp8_add
 import numpy as np
 
 class TestOrca(unittest.TestCase):
