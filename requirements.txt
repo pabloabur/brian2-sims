@@ -1,3 +1,4 @@
+nevergrad==0.4.0
 Brian2==2.5.1
 brian2tools==0.3
 cycler==0.11.0
