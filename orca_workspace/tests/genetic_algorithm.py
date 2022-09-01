@@ -13,7 +13,10 @@ def objective_function(opt_param):
     os.system("python ../SLIF_extrapolation.py --gap "+str(gaps)+"--trial "+str(trial)+str("--path ")+os.getcwd())
 
     return error
-  
-optimizer = ng.optimizers.CMA(parametrization=2, budget=1500)
-recommendation = optimizer.minimize(function_name_y,verbosity=0)  
-results =9*recommendation.value[0],40.0*recommendation.value[1]
+
+
+def test_ga():
+    optimizer = ng.optimizers.CMA(parametrization=2, budget=1500)
+    recommendation = optimizer.minimize(objective_function,verbosity=0)  
+    results = (9*recommendation.value[0],40.0*recommendation.value[1])
+    print(results)
