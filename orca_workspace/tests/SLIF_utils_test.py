@@ -1,5 +1,5 @@
 from brian2 import *
-from SLIF_utils import neuron_rate
+from ../utils/SLIF_utils import neuron_rate
 
 def test_rates():
     pg = PoissonGroup(2, 20*Hz)
