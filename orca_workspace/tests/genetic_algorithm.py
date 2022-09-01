@@ -2,8 +2,7 @@
 
 import os
 import nevergrad as ng
-trial_range = [trial for trial in range(0,9) ]
-gaps = [g for g in range(0,40) ]
+
 
 
 def objective_function(opt_param):
