@@ -6,7 +6,6 @@ jobs:
   build-linux:
     runs-on: ubuntu-latest
     strategy:
-      max-parallel: 5
 
     steps:
     - uses: actions/checkout@v3
@@ -28,3 +27,5 @@ jobs:
       run: |
         conda install pytest
         pytest
+   - name: Run tests
+      run: pytest tests/test*
