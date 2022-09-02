@@ -4,7 +4,8 @@
 """
 
 from brian2.units import *
-from equations.neurons.LIF import LIF, ParamDict
+from core.equations.base_equation import ParamDict
+from core.equations.neurons.LIF import LIF
 
 class LIFIP(LIF):
     def __init__(self):

@@ -1,7 +1,7 @@
 import sys
 from warnings import warn
 
-from brian2 import Synapses, NeuronGroup, ExplicitStateUpdater
+from brian2 import Synapses, NeuronGroup, ExplicitStateUpdater, get_device
 from brian2.units import *
 
 method = ExplicitStateUpdater('''x_new = f(x,t)''')
@@ -36,17 +36,20 @@ def create_neurons(num_neurons, model_desc, raise_warning=False,
 
 def set_params(group, parameters, raise_warning):
     for param, val in parameters.items():
-        try:
-            setattr(group, param, val)
-            if raise_warning:
-                if 0 in getattr(group, param):
-                    warn(f'Variable {param} was initialized as zero with '
-                         f'set_params. Please make sure that dictionary '
-                         f'provided is ordered so that a non-initialized '
-                         f'variable will not erroneously set to zero other '
-                         f'variables dependending on it. You can ignore '
-                         f'this warning by setting raise_warning=True')
-        except AttributeError as e:
-            # TODO maybe this is not necessary because of dict definitions
-            raise type(e)(f'{e} Group {group.name} has no state variable '
-                          f'{param}').with_traceback(sys.exc_info()[2])
+        setattr(group, param, val)
+        if raise_warning:
+            if get_device().__class__.__name__ == 'CPPStandaloneDevice':
+                warn(f'Could not check warning conditions. This can be '
+                     f'caused by cpp standalone mode, which does not '
+                     f'allow access to variables before the network '
+                     f'is run. If possible, run a quick simulation '
+                     f'with numpy simulation to check warnings.')
+            elif 0 in getattr(group, param):
+                warn(f'Variable {param} was initialized as zero with '
+                     f'set_params. Please make sure that dictionary '
+                     f'provided is ordered so that a non-initialized '
+                     f'variable will not erroneously set to zero other '
+                     f'variables dependending on it (e.g. ..., "alpha": '
+                     f' "tau_m/(dt + tau_m)", "tau": "20*ms", ... will '
+                     f'result in alpha set to 0). You can ignore this '
+                     f'warning by setting raise_warning=False')

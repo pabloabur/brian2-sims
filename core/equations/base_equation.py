@@ -1,8 +1,9 @@
 class ParamDict(dict):
-    """ This is just a convenient class used to generate an error if the
-        provided key is not present on the original dictionary. This prevents
-        undeclared entries to go unnoticed so it is easier to notice when a
-        non-existent connection is being handled.
+    """
+    This is just a convenient class used to generate an error if the
+    provided key is not present on the original dictionary. This prevents
+    undeclared entries to go unnoticed so it is easier to notice when a
+    non-existent connection is being handled.
     """
     def __setitem__(self, key, value):
         if key not in self:
@@ -26,6 +27,32 @@ class BaseEquation:
         self.parameters = ParamDict({})
 
     def modify_model(self, attr, new_expr, old_expr=None, key=None):
+        """
+        Modify model.
+
+        Parameters
+        ----------
+        attr : str
+            Indicates which key of the model's dictionary is to be modified.
+        new_expr : str
+            New expression that will replace old values.
+        old_expr : str
+            Specifies which part of the old expression is to be replaced. If
+            not provided, entire expression is used.
+        key : str
+            Key of the dictionary identified by parameter attr.
+
+        Notes
+        -----
+        The model itself is a class with attributes that can be str or dict. In
+        the latter case, using the parameter key is necessary.
+
+        Examples
+        --------
+        >>> model.modify_model('threshold', 'Vm >= 10')
+        >>> model.modify_model('threshold', ' < ', old_expr=' >= ')
+        >>> model.modify_model('namespace', '0', old_expr='127', key='Vthr')
+        """
         desc = getattr(self, attr)
         if isinstance(desc, str):
             if old_expr:
@@ -41,7 +68,7 @@ class BaseEquation:
         elif isinstance(desc, dict):
             desc[key] = new_expr
 
-    def print_equations(self):
+    def print_model(self):
         for var in vars(self):
             print('\n' + var + ':\n============')
             var_desc = getattr(self, var)

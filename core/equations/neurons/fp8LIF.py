@@ -1,7 +1,7 @@
 """ Model with 8-bit floating point resolution"""
 
 from brian2.units import *
-from equations.base_equation import BaseNeuron, ParamDict
+from core.equations.base_equation import BaseNeuron, ParamDict
 
 class fp8LIF(BaseNeuron):
     def __init__(self):
@@ -40,12 +40,13 @@ class fp8LIF(BaseNeuron):
             'Vthr': 127,  # 480 in decimal
             })
         self.parameters = ParamDict({
-            'Vreset':  'decimal2minifloat(-480)',
-            'Vrest': 'decimal2minifloat(0)',
-            'Iconst': 'decimal2minifloat(0)',
-            'alpha': 'decimal2minifloat(0.9375)',
-            'alpha_refrac': 'decimal2minifloat(0.02148438)',
-            'alpha_syn': 'decimal2minifloat(0.8125)',
-            'Vm': 'decimal2minifloat(0)',
+            'Vreset':  '255',  # -480 in decimal,
+            'Vrest': '0',
+            'Iconst': '0',
+            'alpha': '55',  # 0.9375 in decimal,
+            'alpha_refrac': '11',  # 0.02148438 in decimal,
+            'alpha_syn': '53',  # 0.8125 in decimal,
+            'Vm': '0',
+            'g': '0',
             'Vm_noise': '0*mV',
             })

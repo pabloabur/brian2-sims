@@ -2,7 +2,7 @@
     """
 
 from brian2 import *
-from equations.base_equation import BaseSynapse, ParamDict
+from core.equations.base_equation import BaseSynapse, ParamDict
 
 class CUBA(BaseSynapse):
     def __init__(self):

@@ -1,16 +1,7 @@
-#define EXP_WIDTH 4
-#define FRAC_WIDTH 3
-#define FRAC_MASK (1<<FRAC_WIDTH) - 1
-#define SIGN_WIDTH 1
-#define N_BITS SIGN_WIDTH + EXP_WIDTH + FRAC_WIDTH
-#define BIAS 7
-#define GUARD_WIDTH 3
-#define REPR_MASK (1<<N_BITS) - 1
-// Smallest normal: 2^-(-BIAS+1)
-// Smallest subnormal: 2^(-BIAS+1)/2^(FRAC_WIDTH-1)
-// Biased representation of exponents, i.e. what is actually stored in hardware
-#define EMIN 0
-
+/* This is a copy-paste of the string used to define cpp implementation.
+ * Terrible in terms of software maintenance, but including external files
+ * directly on python code was not working and now at least I can test C++
+ * code separately (just need to copy paste any changes in here...)*/
 int fp8_add(int num1, int num2, int _vectorisation_idx){
     unsigned char num1_sign, num1_exp, num1_abs, num1_normal;
     unsigned char num2_sign, num2_exp, num2_abs, num2_normal;
@@ -22,6 +13,16 @@ int fp8_add(int num1, int num2, int _vectorisation_idx){
     unsigned char result, result_sign, result_exp, trunc_result, result_abs;
     unsigned char carry, num_leading_zero=0, num_shifts, aux_shift;
     bool opposite_signs;
+
+    const char EXP_WIDTH = 4;
+    const char FRAC_WIDTH = 3;
+    const char SIGN_WIDTH = 1;
+    const char N_BITS = SIGN_WIDTH + EXP_WIDTH + FRAC_WIDTH;
+    const char GUARD_WIDTH = 3;
+    const char REPR_MASK =  (1<<N_BITS) - 1;
+    // Smallest normal: 2^-(-BIAS+1)
+    // Smallest subnormal: 2^(-BIAS+1)/2^(FRAC_WIDTH-1)
+    // Biased representation of exponents, i.e. what is actually stored in hardware
 
     // Code to extract relevant fields of the bitstring
     num1_sign = num1 >> (EXP_WIDTH+FRAC_WIDTH);
@@ -140,4 +141,3 @@ int fp8_add(int num1, int num2, int _vectorisation_idx){
 
     return (result_sign << EXP_WIDTH+FRAC_WIDTH) + result_abs;
 }
-

@@ -8,19 +8,18 @@ from brian2 import mV, uA, mA, ms, ohm, second, pA, nA, prefs,\
 from brian2tools import plot_state, brian_plot
 import matplotlib.pyplot as plt
 
-from utils.misc import decimal2minifloat, minifloat2decimal
-from utils.misc import DEFAULT_FUNCTIONS
+from core.utils.misc import decimal2minifloat, minifloat2decimal
+from core.utils.misc import DEFAULT_FUNCTIONS
 
-from equations.neurons.LIF import LIF
-from equations.synapses.CUBA import CUBA
-from equations.neurons.fp8LIF import fp8LIF
-from equations.synapses.fp8CUBA import fp8CUBA
-from builder.groups_builder import create_synapses, create_neurons
+from core.equations.neurons.LIF import LIF
+from core.equations.synapses.CUBA import CUBA
+from core.equations.neurons.fp8LIF import fp8LIF
+from core.equations.synapses.fp8CUBA import fp8CUBA
+from core.builder.groups_builder import create_synapses, create_neurons
 
 prefs.codegen.target = "numpy"
 #set_device('cpp_standalone')
 defaultclock.dt = 1*ms
-method = ExplicitStateUpdater('''x_new = f(x,t)''')
 
 input_timestamps = np.asarray([1, 3, 4, 5, 6, 7, 8, 9]) * ms
 input_indices = np.asarray([0, 0, 0, 0, 0, 0, 0, 0])

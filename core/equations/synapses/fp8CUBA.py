@@ -1,6 +1,6 @@
 """ 8-bit floating point implementation of CUBA """
 from brian2.units import *
-from equations.base_equation import BaseSynapse, ParamDict
+from core.equations.base_equation import BaseSynapse, ParamDict
 
 class fp8CUBA(BaseSynapse):
     def __init__(self):
@@ -16,5 +16,5 @@ class fp8CUBA(BaseSynapse):
             })
         self.parameters = ParamDict({
             'delay': '0*ms',
-            'weight': 'decimal2minifloat(10)'
+            'weight': '82'  # 10 in decimal
             })
