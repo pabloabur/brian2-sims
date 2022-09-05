@@ -24,7 +24,7 @@ class TestOrca(unittest.TestCase):
 
     def test_addition(self):
         device.reinit()
-        device.activate(debug=True)
+        device.activate()
         defaultclock.dt = 1*ms
 
         # Each synapse represents one test: g <- weight + g
@@ -55,7 +55,7 @@ class TestOrca(unittest.TestCase):
 
     def test_multiplication(self):
         device.reinit()
-        device.activate(debug=True)
+        device.activate()
         defaultclock.dt = 1*ms
 
         # Each synapse represents one test: g <- weight + g

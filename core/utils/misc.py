@@ -395,14 +395,14 @@ int fp8_multiply(int num1, int num2, int _vectorisation_idx){
     unsigned char guard_bit, sticky_bit, round_factor;
     bool is_normal1, is_normal2;
 
-    const char EXP_WIDTH = 4;
-    const char FRAC_WIDTH = 3;
-    const char FRAC_MASK = (1<<FRAC_WIDTH) - 1;
-    const char SIGN_WIDTH = 1;
-    const char N_BITS = SIGN_WIDTH + EXP_WIDTH + FRAC_WIDTH;
-    const char BIAS = 7;
-    const char GUARD_WIDTH = 3;
-    const char REPR_MASK =  (1<<N_BITS) - 1;
+    const unsigned char EXP_WIDTH = 4;
+    const unsigned char FRAC_WIDTH = 3;
+    const unsigned char FRAC_MASK = (1<<FRAC_WIDTH) - 1;
+    const unsigned char SIGN_WIDTH = 1;
+    const unsigned char N_BITS = SIGN_WIDTH + EXP_WIDTH + FRAC_WIDTH;
+    const unsigned char BIAS = 7;
+    const unsigned char GUARD_WIDTH = 3;
+    const unsigned char REPR_MASK =  (1<<N_BITS) - 1;
     // Smallest normal: 2^-(-BIAS+1)
     // Smallest subnormal: 2^(-BIAS+1)/2^(FRAC_WIDTH-1)
     // Biased representation of exponents, i.e. what is actually stored in hardware
@@ -492,7 +492,7 @@ int fp8_multiply(int num1, int num2, int _vectorisation_idx){
     // Note that negative zeros are not return from operations
     if (result_abs==0) result_sign = 0;
 
-    return (result_sign << EXP_WIDTH+FRAC_WIDTH) + result_abs;
+    return (result_sign << (EXP_WIDTH+FRAC_WIDTH)) + result_abs;
 }
 """
 fp8_multiply.implementations.add_implementation('cpp', cpp_code)
@@ -631,12 +631,12 @@ int fp8_add(int num1, int num2, int _vectorisation_idx){
     unsigned char carry, num_leading_zero=0, num_shifts, aux_shift;
     bool opposite_signs;
 
-    const char EXP_WIDTH = 4;
-    const char FRAC_WIDTH = 3;
-    const char SIGN_WIDTH = 1;
-    const char N_BITS = SIGN_WIDTH + EXP_WIDTH + FRAC_WIDTH;
-    const char GUARD_WIDTH = 3;
-    const char REPR_MASK =  (1<<N_BITS) - 1;
+    const unsigned char EXP_WIDTH = 4;
+    const unsigned char FRAC_WIDTH = 3;
+    const unsigned char SIGN_WIDTH = 1;
+    const unsigned char N_BITS = SIGN_WIDTH + EXP_WIDTH + FRAC_WIDTH;
+    const unsigned char GUARD_WIDTH = 3;
+    const unsigned char REPR_MASK =  (1<<N_BITS) - 1;
     // Smallest normal: 2^-(-BIAS+1)
     // Smallest subnormal: 2^(-BIAS+1)/2^(FRAC_WIDTH-1)
     // Biased representation of exponents, i.e. what is actually stored in hardware
@@ -737,8 +737,8 @@ int fp8_add(int num1, int num2, int _vectorisation_idx){
     trunc_result = result >> aux_shift;
     discarded_bits = (((result << (N_BITS-aux_shift)) & REPR_MASK)
                       >> (N_BITS - aux_shift));
-    sticky_bit = discarded_bits & ((1 << (aux_shift-1)) - 1) != 0;
-    guard_bit = discarded_bits & (1 << (aux_shift-1)) != 0;
+    sticky_bit = (discarded_bits & ((1 << (aux_shift-1)) - 1)) != 0;
+    guard_bit = (discarded_bits & (1 << (aux_shift-1))) != 0;
 
     // Note that negative zeros are not return from operations
     if (abs_val1==abs_val2 && opposite_signs){
@@ -756,7 +756,7 @@ int fp8_add(int num1, int num2, int _vectorisation_idx){
     if (result_abs > (1<<(N_BITS-1)) - 1)
         result_abs = (1<<(N_BITS-1)) - 1;
 
-    return (result_sign << EXP_WIDTH+FRAC_WIDTH) + result_abs;
+    return (result_sign << (EXP_WIDTH+FRAC_WIDTH)) + result_abs;
 }
 """
 fp8_add.implementations.add_implementation('cpp', cpp_code)
@@ -792,8 +792,8 @@ bool fp8_smaller_than(int num1, int num2, int _vectorisation_idx){
     unsigned char sign1, exp1, abs_val1, sign2, exp2, abs_val2;
     bool is_normal1, is_normal2, result;
 
-    const char EXP_WIDTH = 4;
-    const char FRAC_WIDTH = 3;
+    const unsigned char EXP_WIDTH = 4;
+    const unsigned char FRAC_WIDTH = 3;
 
     // Code to extract relevant fields of the bitstring
     sign1 = num1 >> (EXP_WIDTH+FRAC_WIDTH);
