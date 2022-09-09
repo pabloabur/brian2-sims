@@ -1,8 +1,11 @@
+bokeh==2.4.3
 Brian2==2.5.1
+-e git+ssh://git@github.com/pabloabur/brian2-sims.git@ddee109ca3e6c5251f2dba2f41b080a156279dca#egg=brian2_sims
 brian2tools==0.3
 cycler==0.11.0
 Cython==0.29.32
 elephant==0.11.1
+fancycompleter==0.9.1
 fonttools==4.37.1
 gitdb==4.0.9
 GitPython==3.1.27
@@ -13,16 +16,21 @@ lxml==4.9.1
 markdown-strings==3.3.0
 MarkupSafe==2.1.1
 matplotlib==3.5.3
+meson==0.63.1
 mpmath==1.2.1
 neo==0.10.2
 numpy==1.23.2
 packaging==21.3
 pandas==1.4.3
+pdbpp==0.10.3
 Pillow==9.2.0
+Pygments==2.13.0
 PyLEMS==0.5.9
 pyparsing==3.0.9
+pyrepl==0.9.0
 python-dateutil==2.8.2
 pytz==2022.2.1
+PyYAML==6.0
 quantities==0.13.0
 scipy==1.9.1
 seaborn==0.11.2
@@ -31,6 +39,8 @@ six==1.16.0
 smmap==5.0.0
 sympy==1.11.1
 tomli==2.0.1
+tornado==6.2
 tqdm==4.64.0
 typing_extensions==4.3.0
 viziphant==0.2.0
+wmctrl==0.4

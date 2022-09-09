@@ -3,7 +3,7 @@
 
 from brian2 import *
 
-from equations.synapses.STDP import STDP, ParamDict
+from core.equations.synapses.STDP import STDP, ParamDict
 
 class iSTDP(STDP):
     def __init__(self):

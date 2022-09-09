@@ -3,7 +3,7 @@
 
 from brian2 import *
 
-from equations.synapses.CUBA import CUBA, ParamDict
+from core.equations.synapses.CUBA import CUBA, ParamDict
 
 class STDP(CUBA):
     def __init__(self):
