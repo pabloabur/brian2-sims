@@ -1,16 +1,17 @@
 from brian2 import PoissonGroup, SpikeMonitor, StateMonitor
-from brian2 import defaultclock, prefs, Network, collect
+from brian2 import defaultclock, prefs, Network, collect, device, get_device,\
+        set_device, run
 from brian2 import second, Hz, ms, ohm, mA
 
-from orca_column import orcaColumn
-from teili.tools.misc import minifloat2decimal, decimal2minifloat
+#from orca_column import orcaColumn
+from core.utils.misc import minifloat2decimal, decimal2minifloat
 
-from utils.SLIF_utils import neuron_rate, get_metrics
-from parameters.orca_params import ConnectionDescriptor, PopulationDescriptor
+from core.utils.SLIF_utils import neuron_rate, get_metrics
+from core.parameters.orca_params import ConnectionDescriptor, PopulationDescriptor
 
-from equations.neurons.fp8LIF import fp8LIF
-from equations.synapses.fp8CUBA import fp8CUBA
-from builder.groups_builder import create_synapses, create_neurons
+from core.equations.neurons.fp8LIF import fp8LIF
+from core.equations.synapses.fp8CUBA import fp8CUBA
+from core.builder.groups_builder import create_synapses, create_neurons
 
 import sys
 import os
@@ -18,8 +19,6 @@ from datetime import datetime
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-import pyqtgraph as pg
-from pyqtgraph.Qt import QtCore, QtGui
 import pickle
 import json
 import argparse
@@ -75,17 +74,20 @@ def change_input_conn(desc):
         desc.base_vals[conn]['weight'] = np.floor(.42*max_weight)
 
 parser = argparse.ArgumentParser(description='Reproduces a balanced network')
-parser.add_argument('wi', type=float, help='strength of inhibitory weight')
+parser.add_argument('--wi', type=float, help='strength of inhibitory weight')
+parser.add_argument('--trial', type=int, default=0, help='trial number')
 parser.add_argument('--path', default=None, help='directory to save')
 parser.add_argument('--quiet', action='store_true',
                     help='whether to create plots/info or not')
 args = parser.parse_args()
 wi = args.wi
+trial_no = args.trial
 path = args.path
 quiet = args.quiet
 
 defaultclock.dt = 1*ms
-prefs.codegen.target = "numpy"
+#prefs.codegen.target = "numpy"
+set_device('cpp_standalone')
 sim_dur = 1000
 
 poisson_spikes = PoissonGroup(285, rates=6*Hz)
@@ -112,9 +114,11 @@ inh_cells = cells[Ne:]
 e_syn_model = fp8CUBA()
 e_syn_model.connection['p'] = .25
 thl_conns = create_synapses(poisson_spikes, cells, e_syn_model)
+
 e_syn_model = fp8CUBA()
 e_syn_model.connection['p'] = .1
 intra_exc = create_synapses(exc_cells, cells, e_syn_model)
+
 i_syn_model = fp8CUBA()
 i_syn_model.connection['p'] = .1
 i_syn_model.namespace['w_factor'] = decimal2minifloat(-1)
@@ -128,7 +132,6 @@ intra_inh = create_synapses(inh_cells, cells, i_syn_model)
 #sttmon_i = StateMonitor(column.col_groups['L4'].groups['pv_cells'],
 #                        variables='Vm', record=np.random.choice(Ni, 4, replace=False))
 
-trials = 10
 selected_exc_cells = np.random.choice(Ne, 4, replace=False)
 selected_inh_cells = np.random.choice(Ni, 4, replace=False)
 
@@ -140,7 +143,7 @@ if not path:
 Metadata = {'selected_exc_cells': selected_exc_cells.tolist(),
             'selected_inh_cells': selected_inh_cells.tolist(),
             'dt': str(defaultclock.dt),
-            'trials': trials,
+            'trial_no': trial_no,
             'duration': str(sim_dur*ms),
             'inh_weight': i_syn_model.parameters['weight']}
 with open(f'{path}/metadata.json', 'w') as f:
@@ -153,26 +156,20 @@ sttmon_e = StateMonitor(exc_cells, variables='Vm',
 sttmon_i = StateMonitor(inh_cells, variables='Vm',
                         record=selected_inh_cells)
 
-trial_avg_rate = []
 kernel = kernels.GaussianKernel(sigma=30*q.ms)
-net = Network(collect())
 #net.add([x for x in column.col_groups.values()])
 #net.add([x.input_groups for x in column.col_groups.values()])
-net.store()
-for trial in range(trials):
-    print('########################')
-    print(f'Starting trial {trial+1}')
-    net.restore()
-    net.run(sim_dur*ms)
+print('########################')
+print(f'Starting simulation')
+run(sim_dur*ms)
 
-    temp_trains = spkmon_e.spike_trains()
-    spk_trains = [neo.SpikeTrain(temp_trains[x]/ms, t_stop=sim_dur, units='ms')
-                  for x in temp_trains]
-    pop_rates = statistics.instantaneous_rate(spk_trains,
-                                              sampling_period=1*q.ms,
-                                              kernel=kernel)
-    pop_avg_rates = np.mean(pop_rates, axis=1)
-    trial_avg_rate.append(np.mean(pop_avg_rates))
+temp_trains = spkmon_e.spike_trains()
+spk_trains = [neo.SpikeTrain(temp_trains[x]/ms, t_stop=sim_dur, units='ms')
+              for x in temp_trains]
+pop_rates = statistics.instantaneous_rate(spk_trains,
+                                          sampling_period=1*q.ms,
+                                          kernel=kernel)
+pop_avg_rates = np.mean(pop_rates, axis=1)
 
 np.savez(f'{path}/exc_raster.npz',
          times=spkmon_e.t/ms,
@@ -180,10 +177,8 @@ np.savez(f'{path}/exc_raster.npz',
 np.savez(f'{path}/inh_raster.npz',
          times=spkmon_i.t/ms,
          indices=spkmon_i.i)
-np.save(f'{path}/avg_rate.npy', trial_avg_rate)
 
 if not quiet:
-    # Only last trials considered below
     fig, ax1 = plt.subplots()
     ax2 = ax1.twinx()
     ax2.plot(pop_rates.times, pop_avg_rates)
