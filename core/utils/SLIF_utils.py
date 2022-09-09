@@ -10,7 +10,7 @@ from scipy.interpolate import interp1d
 
 import re
 
-from utils.misc import minifloat2decimal, decimal2minifloat
+from core.utils.misc import minifloat2decimal, decimal2minifloat
 
 import numpy as np
 import matplotlib.pyplot as plt
