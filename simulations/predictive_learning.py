@@ -65,12 +65,10 @@ prefs.codegen.target = "numpy"
 #set_device('cpp_standalone', directory='output', build_on_run=False)
 #set_device('markdown', filename='model_description')
 rng = np.random.default_rng(12345)
-defaultclock.dt = 1*ms
+defaultclock.dt = .1*ms # TODO 1ms
 
 # Initialize input sequence
-num_items = 9
 item_duration = 20
-num_channels = 36
 noise_prob = None
 item_rate = 128
 repetitions = 200
@@ -95,6 +93,8 @@ missing_range = args.miss
 spike_indices = []
 spike_times = []
 #item_superposition = time_gap
+# num_channels = 36
+# num_items = 9
 #for i in range(repetitions):
 #    sequence = SequenceTestbench(num_channels, num_items, item_duration,
 #                                 item_superposition, noise_prob, item_rate,
@@ -126,24 +126,77 @@ spike_times = []
 #sequence_duration = sequence.cycle_length * ms + time_gap*num_items*ms
 
 # This input is very specific for this case.
-isi = np.ceil(1/item_rate*1000).astype(int)
-input_times = []
-input_indices = []
-for i in range(repetitions):
-    for j in range(num_items):
-        try:
-            last_t = input_times[-1]
-        except IndexError:
-            last_t = 0
-        tmp_t = np.repeat([x+time_gap for x in range(last_t, (2*isi+last_t)+1, isi)], 4).tolist()
-        input_times.extend(tmp_t)
+def create_item(input_indices, isi, num_spikes):
+    indices = [x for x in input_indices]*num_spikes
+    times = np.repeat([x for x in range(0, num_spikes*isi, isi)],
+                      len(input_indices)).tolist()
 
-        tmp_i = [x for x in range(4*j, 4*j+4)]*3
-        input_indices.extend(tmp_i)
+    return {'indices': indices, 'times': times}
+
+def create_sequence(items, intra_seq_dt):
+    sequence_indices = []
+    sequence_times = []
+    last_t = 0
+    for i in items:
+        sequence_indices.extend(i['indices'])
+        sequence_times.extend([x+last_t for x in i['times']])
+        last_t = sequence_times[-1] + intra_seq_dt
+
+    return {'indices': sequence_indices,
+            'times': sequence_times}
+
+def create_testbench(sequences, occurences, inter_seq_dt, num_seq):
+    testbench_indices = []
+    testbench_times = []
+    testbench = np.random.choice(sequences, num_seq, p=occurences)
+    last_t = 0
+    for seq in testbench:
+        testbench_indices.extend(seq['indices'])
+        testbench_times.extend([x+last_t for x in seq['times']])
+        last_t = testbench_times[-1] + inter_seq_dt
+
+    return testbench_indices, testbench_times
+
+isi = np.ceil(1/item_rate*1000).astype(int)
+ch_groups = 4
+A = create_item([0,1,2,3], isi, 3)
+B = create_item([4,5,6,7], isi, 3)
+C = create_item([8,9,10,11], isi, 3)
+D = create_item([12,13,14,15], isi, 3)
+E = create_item([16,17,18,19], isi, 3)
+F = create_item([20,21,22,23], isi, 3)
+G = create_item([24,25,26,27], isi, 3)
+H = create_item([28,29,30,31], isi, 3)
+
+seq1 = [A, B, C, D]
+seq2 = [E, F, G, H]
+num_items = len(seq1 + seq2)
+seq1 = create_sequence(seq1, 0)
+seq2 = create_sequence(seq2, 0)
+
+input_indices, input_times = create_testbench([seq1, seq2], [.5, .5], 40, repetitions)
 input_indices = np.array(input_indices)
-input_times = np.array(input_times) * ms - time_gap*ms
-aux_ind = np.where(np.cumsum(input_indices==(num_channels-1))==3)[0]
-sequence_duration = input_times[aux_ind[0]]
+input_times = np.array(input_times) * ms
+sequence_duration = max(seq1['times']) * ms
+num_channels = int(max(input_indices) + 1)
+
+#input_times = []
+#input_indices = []
+#for i in range(repetitions):
+#    for j in range(num_items):
+#        try:
+#            last_t = input_times[-1]
+#        except IndexError:
+#            last_t = 0
+#        tmp_t = np.repeat([x+time_gap for x in range(last_t, (2*isi+last_t)+1, isi)], 4).tolist()
+#        input_times.extend(tmp_t)
+#
+#        tmp_i = [x for x in range(4*j, 4*j+4)]*3
+#        input_indices.extend(tmp_i)
+#input_indices = np.array(input_indices)
+#input_times = np.array(input_times) * ms - time_gap*ms
+#aux_ind = np.where(np.cumsum(input_indices==(num_channels-1))==3)[0]
+#sequence_duration = input_times[aux_ind[0]]
 
 sim_duration = np.max(input_times)
 # Testing time adjusted so that training ends with complete sequence
@@ -195,7 +248,7 @@ for key in conn_desc:
 conn_desc['pyr_pyr']['connection']['p'] = 1.0
 conn_desc['pyr_pyr']['plast'] = 'hstdp'
 conn_desc['sst_pv']['plast'] = 'static'
-conn_desc['ff_pyr']['plast'] = 'stdp'
+conn_desc['ff_pyr']['plast'] = 'static' # TODO stdp
 
 # Removing things not used for network
 conn_desc = {key: val for key, val in conn_desc.items() if 'fb_' not in key}
@@ -219,7 +272,7 @@ tau_m_sample = {'attr': 'parameters', 'key': 'tau_m',
 refrac_period = {'attr': 'refractory', 'new_expr': '3*ms'}
 inh_sign = {'attr': 'namespace', 'key': 'w_factor', 'new_expr': -1}
 inh_w = {'attr': 'parameters', 'key': 'weight',
-         'new_expr': 'clip(2 + randn(), 0, inf)*mV'}
+         'new_expr': 'clip(40 + randn(), 0, inf)*mV'} # TODO back to 2
 plast_inh_w = {'attr': 'parameters', 'key': 'w_plast',
                'new_expr': 'clip(2 + randn(), 0, inf)*mV'}
 tau_syn_sample = {'attr': 'parameters', 'key': 'tau_syn',
@@ -238,7 +291,7 @@ sample_itrace = {'attr': 'parameters', 'key': 'tau_itrace',
                  'new_expr': 'clip(20 + 2*randn(), 0, inf)*ms'}
 sample_jtrace = {'attr': 'parameters', 'key': 'tau_jtrace',
                  'new_expr': 'clip(30 + 2*randn(), 0, inf)*ms'}
-syn_competition = {'attr': 'namespace', 'key': 'w_lim', 'new_expr': 100*mV}
+syn_competition = {'attr': 'namespace', 'key': 'w_lim', 'new_expr': 35*mV}# TODO was 100
 max_we = {'attr': 'namespace', 'key': 'w_max', 'new_expr': 35*mV}
 
 params_modifier = {
@@ -248,14 +301,19 @@ params_modifier = {
     'sst_cells': [tau_m_sample, refrac_period],
     'vip_cells': [tau_m_sample, refrac_period],
     # inhibitory connections
+    # TODO and sst_pyr like below
     'pv_pyr': [inh_sign, tau_syn_sample, plast_inh_w, sample_itrace, sample_jtrace],
-    'pv_pv': [inh_sign, tau_syn_sample],
+    #'pv_pyr': [inh_sign, tau_syn_sample, inh_w],
+    'pv_pv': [inh_sign, tau_syn_sample, inh_w],
     'sst_pyr': [inh_sign, tau_syn_sample, plast_inh_w, sample_itrace, sample_jtrace],
-    'sst_pv': [inh_sign, tau_syn_sample, inh_w],
+    #'sst_pyr': [inh_sign, tau_syn_sample, inh_w],
+    'sst_pv': [inh_sign, tau_syn_sample],
     'sst_vip': [inh_sign, tau_syn_sample],
     'vip_sst': [inh_sign, tau_syn_sample],
     # excitatory connections
-    'ff_pyr' : [tau_syn_sample, plastic_inp_w, sample_itrace, sample_jtrace],
+    'ff_pyr' : [tau_syn_sample, static_inp_w],
+    # TODO stdp below
+    #'ff_pyr' : [tau_syn_sample, plastic_inp_w, sample_itrace, sample_jtrace],
     'ff_pv' : [tau_syn_sample, static_inp_w],
     'ff_sst' : [tau_syn_sample, static_inp_w],
     'ff_vip' : [tau_syn_sample, static_inp_w],
@@ -296,6 +354,10 @@ for neu_group, plast in pops['plast'].items():
     column[neu_group] = create_neurons(pops[f'num_{target}'], neu_model)
 
 # add connections
+# TODO no istdp
+#conn_desc['pv_pyr']['plast'] = 'static'
+#conn_desc['pv_pyr']['plast'] = 'static'
+# TODO more connections here
 conn_desc['pyr_pv']['connection']['p'] = 0.79
 conn_desc['pyr_sst']['connection']['p'] = 0.79
 conn_desc['pyr_vip']['connection']['p'] = 0.79
@@ -359,8 +421,10 @@ inh_readout = create_neurons(num_items, neu_model, name='inh_readout')
 syn_model = CUBA()
 #conn_desc = ConnectionDescriptor('L4', 'input')
 #conn_desc.filter_params()
-syn_model.modify_model('connection', [x for x in range(num_channels)], key='i')
-syn_model.modify_model('connection', np.repeat([x for x in range(num_items)], 4), key='j')
+syn_model.modify_model('connection', np.unique(input_indices), key='i')
+syn_model.modify_model('connection',
+                       np.repeat([x for x in range(num_items)], ch_groups),
+                       key='j')
 syn_model.modify_model('parameters', 18*mV, key='weight')
 input_readout = create_synapses(column['ff_cells'], readout, syn_model, name='input_readout')
 input_inhreadout = create_synapses(column['ff_cells'], inh_readout, syn_model, name='input_inhreadout')
@@ -401,7 +465,7 @@ syn_model.modify_model('model', '',
     old_expr='+ int(outgoing_factor > 0*volt)*outgoing_factor ')
 syn_model.modify_model('model', 'incoming_weightsO',
     old_expr='incoming_weights')
-syn_model.namespace['w_lim'] = 65*mV
+syn_model.namespace['w_lim'] = 100*mV # TODO was 65
 syn_model.parameters['w_plast'] = 10*mV
 syn_model.namespace['h_eta'] = .0005
 pyr_readout = create_synapses(column['pyr_cells'], readout, syn_model, name='pyr_readout')
@@ -487,6 +551,9 @@ spkmon_r = SpikeMonitor(readout, name='readoutmon')
 #pyr_readout.weight = 0
 
 # Training
+# TODO back to FFI
+column['ff_pv'].namespace['w_factor'] = 0
+column['ff_sst'].namespace['w_factor'] = 0
 Net = Network(collect())
 #Net.add([x for x in column.col_groups.values()])
 Net.add(list(column.values()))
@@ -640,7 +707,7 @@ if not quiet:
 
     rmat = _float_connection_matrix(column['pyr_pyr'].i, column['pyr_pyr'].j, column['pyr_pyr'].w_plast)
     plt.figure()
-    fmat = _float_connection_matrix(column['ff_pyr'].i, column['ff_pyr'].j, column['ff_pyr'].w_plast)
+    fmat = _float_connection_matrix(column['ff_pyr'].i, column['ff_pyr'].j, column['ff_pyr'].weight) # TODO w_plast for stdp
     plt.imshow(fmat.T[:, permutation_ids])
     omat = _float_connection_matrix(column['pyr_readout'].i, column['pyr_readout'].j, column['pyr_readout'].w_plast)
     plt.figure()

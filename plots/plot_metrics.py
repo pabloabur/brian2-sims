@@ -89,12 +89,13 @@ train_metric = np.zeros((len(gaps), len(trials)))
 train_metric.fill(np.nan)
 test_metric = np.zeros((len(gaps), len(trials)))
 test_metric.fill(np.nan)
-test_selectivity = np.zeros((9, len(trials), len(gaps)))
+# TODO 6 below hardcoded
+test_selectivity = np.zeros((6, len(trials), len(gaps)))
 test_selectivity.fill(np.nan)
 # the worst case scenario
 rand_metric = np.zeros((len(gaps), len(trials)))
 rand_metric.fill(np.nan)
-rand_selectivity = np.zeros((9, len(trials), len(gaps)))
+rand_selectivity = np.zeros((6, len(trials), len(gaps)))
 rand_selectivity.fill(np.nan)
 #I = np.roll(np.eye(9), axis=(0, 1), shift=(0, 1))  # in case it is slightly shifted
 I = np.eye(9)
@@ -147,10 +148,13 @@ for exp in experiments:
     with open(exp / 'output_spikes', 'rb') as f:
         output_spikes = pickle.load(f)
 
-    input_spikes = [i_spk if np.any(i_spk) else 0 for i_spk in input_spikes]
+    # Some channels might not be active
+    input_spikes = [i_spk for i_spk in input_spikes if np.any(i_spk)]
     input_spikes = [input_spikes[idx] for idx in range(0, len(input_spikes), channel_groups)]
-    output_spikes = [o_spk if np.any(o_spk) else 0 for o_spk in output_spikes]
-    tf = max(chain(map(max, output_spikes), map(max, input_spikes)))
+    output_spikes = [o_spk if np.any(o_spk) else [0] for o_spk in output_spikes]
+    max_out = max([max(x, default=0) for x in output_spikes], default=0)
+    max_in = max([max(x, default=0) for x in input_spikes], default=0)
+    tf = max([max_in, max_out], default=0)
     edges = (0, tf)
     input_spikes = [neo.SpikeTrain(spks, units='ms', t_stop=sim_duration) for spks in input_spikes]
     output_spikes = [neo.SpikeTrain(spks, units='ms', t_stop=sim_duration) for spks in output_spikes]
@@ -200,6 +204,7 @@ for i, spk in enumerate(input_spikes):
 for i, spk in enumerate(output_spikes):
     axs[1].plot(spk, [i]*len(spk), 'k.')
 plt.xlim([interval_train[0], interval_test[-1]])
+plt.vlines(interval_train, ymin=-1, ymax=10)
 
 plt.figure()
 plt.imshow(train_resp_mat[:, :, 0], interpolation=None)
@@ -226,9 +231,9 @@ plt.colorbar()
 if np.any(test_mat_0):
     plt.figure()
     plt.imshow(test_mat_0[:, :, 0], interpolation=None)
-    plt.title('synchrony coefficients - testing, no time gaps')
-    plt.xlabel('output spike trains')
-    plt.ylabel('input spike trains')
+    plt.title('confusion matrix') #testing, large gaps
+    plt.xlabel('output labels')
+    plt.ylabel('input labels')
     plt.colorbar()
 
 plt.figure()
