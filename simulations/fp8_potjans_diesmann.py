@@ -30,7 +30,7 @@ seed(s)
 defaultclock.dt = 1*ms
 set_device('cpp_standalone')
 
-bg = 8.0                    # default value for background rate
+bg_freq = 8.0                    # default value for background rate
 
 """ =================== Parameters =================== """
 ###############################################################################
@@ -55,13 +55,6 @@ table = array([[0.101,  0.169, 0.044, 0.082, 0.032, 0.,     0.008, 0.,     0.   
                [0.016,  0.007, 0.021, 0.017, 0.057, 0.020,  0.040, 0.225,  0.0512],
                [0.036,  0.001, 0.003, 0.001, 0.028, 0.008,  0.066, 0.144,  0.0196]])
 
-# Synapses parameters
-
-d_ex = 1.5*ms       # Excitatory delay
-std_d_ex = 0.75*ms  # Std. Excitatory delay
-d_in = 0.80*ms      # Inhibitory delay
-std_d_in = 0.4*ms   # Std. Inhibitory delay
-
 filename = 'sim_data/PD.dat'
 
 """ =============== Neuron definitions =============== """
@@ -69,45 +62,26 @@ neu_model = fp8LIF()
 # tau_syn=0.5ms, resulting in decimal alpha_syn of 0.333. Aproximated to 0.3125
 # original values were maintained, but some were quite different e.g. tau_m=10ms
 neu_model.modify_model('parameters', '42', key='alpha_syn')
-cells = create_neurons(N, neu_model)
+neurons = create_neurons(N, neu_model)
 # Sample from all positive values with mean on 64
-probs=norm.pdf(range(127), loc=64, scale=50)
+probs = sc.norm.pdf(range(127), loc=64, scale=50)
 probs /= sum(probs)
-cells.Vm = np.random.choice(range(127), size=N, p=probs)
-# TODO sample weights and delays as above
-# TODO transform poisson inputs into poisson groups
+neurons.Vm = np.random.choice(range(127), size=N, p=probs)
 
 """ ==================== Networks ==================== """
-# TODO remove sims and params I wont use
-w_ex = 87.8*pA
-std_w_ex = 0.1*w_ex
+# Weight values were 87.8pA with std 8.78pA
 bg_layer = array([1600, 1500 ,2100, 1900, 2000, 1900, 2900, 2100])
 
 pop = [] # Stores NeuronGroups, one for each population
 for r in range(0, 8):
-    pop.append(cells[nn_cum[r]:nn_cum[r+1]])
-
-syn_model = '''
-            w:amp           # synaptic weight
-            '''
-
-# equations executed only when presynaptic spike occurs:
-# for excitatory connections
-pre_eq = '''
-        I_post += w
-        '''
+    pop.append(neurons[nn_cum[r]:nn_cum[r+1]])
 
 con = [] # Stores connections
-
-###########################################################################
-# Connecting neurons
-###########################################################################
 pre_index = []
 post_index = []
 
 for c in range(0, 8):
     for r in range(0, 8):
-
         # number of synapses calculated with equation 3 from the article
         nsyn = int(log(1.0-table[r][c])/log(1.0 - (1.0/float(n_layer[c]*n_layer[r]))))
 
@@ -117,43 +91,52 @@ for c in range(0, 8):
         if nsyn<1:
             pass
         else:
+            syn_model = fp8CUBA()
+            syn_model.modify_model('connection', pre_index, key='i')
+            syn_model.modify_model('connection', post_index, key='j')
+            con.append(create_synapses(pop[c], pop[r], syn_model))
             # Excitatory connections
             if (c % 2) == 0:
                 # Synaptic weight from L4e to L2/3e is doubled
                 if c == 2 and r == 0:
-                    con.append(Synapses(pop[c], pop[r], model=syn_model, on_pre=pre_eq))
-                    con[-1].connect(i = pre_index, j = post_index)
-                    con[-1].w = '2.0*clip((w_ex + std_w_ex*randn()),w_ex*0.0, w_ex*inf)'
+                    # ranging between 16 and 24 in decimal
+                    probs = sc.norm.pdf(range(88, 93), loc=90, scale=1)
+                    probs /= sum(probs)
+                    con[-1].weight = np.random.choice(range(88, 93), size=nsyn, p=probs)
                 else:
-                    con.append(Synapses(pop[c], pop[r], model=syn_model, on_pre=pre_eq))
-                    con[-1].connect(i = pre_index, j = post_index)
-                    con[-1].w = 'clip((w_ex + std_w_ex*randn()),w_ex*0.0, w_ex*inf)'
-                con[-1].delay = 'clip(d_ex + std_d_ex*randn(), 0.1*ms, d_ex*inf)'
+                    # ranging between 8 and 12 in decimal
+                    probs = sc.norm.pdf(range(80, 85), loc=82, scale=1)
+                    probs /= sum(probs)
+                    con[-1].weight = np.random.choice(range(80, 85), size=nsyn, p=probs)
+                con[-1].delay = 'clip(1.5*ms + 0.75*ms*randn(), 0.1*ms, 1.5*ms*inf)'
 
             # Inhibitory connections
             else:
-                con.append(Synapses(pop[c], pop[r], model=syn_model, on_pre=pre_eq))
-                con[-1].connect(i = pre_index, j = post_index)
-                con[-1].w = '-4*clip((w_ex + std_w_ex*randn()),w_ex*0.0, w_ex*inf)'
-                con[-1].delay = 'clip(d_in + std_d_in*randn(), 0.1*ms, d_in*inf)'
+                # ranging between 32 and 48 in decimal
+                probs = sc.norm.pdf(range(96, 101), loc=98, scale=1)
+                probs /= sum(probs)
+                con[-1].weight = np.random.choice(range(96, 101), size=nsyn, p=probs)
+                con[-1].namespace['w_factor'] = 184  # -1 in decimal
+                con[-1].delay = 'clip(0.80*ms + 0.4*ms*randn(), 0.1*ms, 0.80*ms*inf)'
 
-###########################################################################
-# Creating poissonian background inputs
-###########################################################################
 bg_in  = []
+poisson_pop = []
+syn_model = fp8CUBA()
+# TODO syn_model.connection['p'] = .25?
 for r in range(0, 8):
-    bg_in.append(PoissonInput(pop[r], 'I', bg_layer[r], bg_freq*Hz, weight=w_ex))
+    poisson_pop.append(PoissonGroup(bg_layer[r], rates=bg_freq*Hz))
+    bg_in.append(create_synapses(poisson_pop[-1], pop[r], syn_model))
 
 ###########################################################################
 # Creating spike monitors
 ###########################################################################
-smon_net = SpikeMonitor(cells)
+smon_net = SpikeMonitor(neurons)
 
 
 """ ==================== Running ===================== """
 net = Network(collect())
 
-net.add(neurons,pop, con, bg_in)    # Adding objects to the simulation
+net.add(neurons,pop, con, bg_in, poisson_pop)    # Adding objects to the simulation
 net.run(tsim*second, report='stdout')
 
 savetxt(filename, c_[smon_net.i,smon_net.t/ms],fmt="%i %.2f")
