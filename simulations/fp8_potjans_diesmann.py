@@ -122,7 +122,7 @@ for c in range(0, 8):
 bg_in  = []
 poisson_pop = []
 syn_model = fp8CUBA()
-# TODO syn_model.connection['p'] = .25?
+syn_model.connection['p'] = .075
 for r in range(0, 8):
     poisson_pop.append(PoissonGroup(bg_layer[r], rates=bg_freq*Hz))
     bg_in.append(create_synapses(poisson_pop[-1], pop[r], syn_model))

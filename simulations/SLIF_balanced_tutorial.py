@@ -74,7 +74,7 @@ def change_input_conn(desc):
         desc.base_vals[conn]['weight'] = np.floor(.42*max_weight)
 
 parser = argparse.ArgumentParser(description='Reproduces a balanced network')
-parser.add_argument('--wi', type=float, help='strength of inhibitory weight')
+parser.add_argument('--wi', type=float, help='strength of inhibitory weight, in fp8')
 parser.add_argument('--trial', type=int, default=0, help='trial number')
 parser.add_argument('--path', default=None, help='directory to save')
 parser.add_argument('--quiet', action='store_true',
@@ -87,7 +87,7 @@ quiet = args.quiet
 
 defaultclock.dt = 1*ms
 #prefs.codegen.target = "numpy"
-set_device('cpp_standalone')
+set_device('cpp_standalone', directory='output_balance')
 sim_dur = 1000
 
 poisson_spikes = PoissonGroup(285, rates=6*Hz)
@@ -122,7 +122,7 @@ intra_exc = create_synapses(exc_cells, cells, e_syn_model)
 i_syn_model = fp8CUBA()
 i_syn_model.connection['p'] = .1
 i_syn_model.namespace['w_factor'] = decimal2minifloat(-1)
-i_syn_model.parameters['weight'] = decimal2minifloat(wi)
+i_syn_model.parameters['weight'] = wi
 intra_inh = create_synapses(inh_cells, cells, i_syn_model)
 
 #spkmon_e = SpikeMonitor(column.col_groups['L4'].groups['pyr_cells'])
@@ -138,7 +138,7 @@ selected_inh_cells = np.random.choice(Ni, 4, replace=False)
 if not path:
     date_time = datetime.now()
     path = f"""{date_time.strftime('%Y.%m.%d')}_{date_time.hour}.{date_time.minute}/"""
-    os.makedirs(path)
+os.makedirs(path)
 
 Metadata = {'selected_exc_cells': selected_exc_cells.tolist(),
             'selected_inh_cells': selected_inh_cells.tolist(),
@@ -146,7 +146,7 @@ Metadata = {'selected_exc_cells': selected_exc_cells.tolist(),
             'trial_no': trial_no,
             'duration': str(sim_dur*ms),
             'inh_weight': i_syn_model.parameters['weight']}
-with open(f'{path}/metadata.json', 'w') as f:
+with open(path+'metadata.json', 'w') as f:
     json.dump(Metadata, f)
 
 spkmon_e = SpikeMonitor(exc_cells)
@@ -159,8 +159,6 @@ sttmon_i = StateMonitor(inh_cells, variables='Vm',
 kernel = kernels.GaussianKernel(sigma=30*q.ms)
 #net.add([x for x in column.col_groups.values()])
 #net.add([x.input_groups for x in column.col_groups.values()])
-print('########################')
-print(f'Starting simulation')
 run(sim_dur*ms)
 
 temp_trains = spkmon_e.spike_trains()
@@ -177,12 +175,15 @@ np.savez(f'{path}/exc_raster.npz',
 np.savez(f'{path}/inh_raster.npz',
          times=spkmon_i.t/ms,
          indices=spkmon_i.i)
+np.savez(f'{path}/rates.npz',
+         times=np.array(pop_rates.times),
+         rates=np.array(pop_avg_rates))
 
 if not quiet:
     fig, ax1 = plt.subplots()
     ax2 = ax1.twinx()
-    ax2.plot(pop_rates.times, pop_avg_rates)
-    brian_plot(spkmon_e, marker=',', axes=ax1)
+    ax2.plot(pop_rates.times, pop_avg_rates, color='red')
+    brian_plot(spkmon_e, marker=',', color='black', axes=ax1)
     ax1.set_xlabel(f'time ({pop_rates.times.dimensionality.latex})')
     ax1.set_ylabel('neuron number')
     ax2.set_ylabel(f'rate ({pop_rates.dimensionality})')
