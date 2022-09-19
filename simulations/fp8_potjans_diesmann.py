@@ -28,7 +28,7 @@ tsim = float(sys.argv[1])   # time of simulation
 s = 1000
 seed(s)
 defaultclock.dt = 1*ms
-set_device('cpp_standalone')
+set_device('cpp_standalone', directory='/scratch/lf11/pu6813/code')
 
 bg_freq = 8.0                    # default value for background rate
 
@@ -58,15 +58,16 @@ table = array([[0.101,  0.169, 0.044, 0.082, 0.032, 0.,     0.008, 0.,     0.   
 filename = 'sim_data/PD.dat'
 
 """ =============== Neuron definitions =============== """
+fp8_values = range(128)
 neu_model = fp8LIF()
 # tau_syn=0.5ms, resulting in decimal alpha_syn of 0.333. Aproximated to 0.3125
 # original values were maintained, but some were quite different e.g. tau_m=10ms
 neu_model.modify_model('parameters', '42', key='alpha_syn')
 neurons = create_neurons(N, neu_model)
-# Sample from all positive values with mean on 64
-probs = sc.norm.pdf(range(127), loc=64, scale=50)
-probs /= sum(probs)
-neurons.Vm = np.random.choice(range(127), size=N, p=probs)
+sampled_var = np.rint(np.clip(96 + 30*np.random.randn(N),
+                              min(fp8_values),
+                              max(fp8_values)))
+neurons.Vm = sampled_var
 
 """ ==================== Networks ==================== """
 # Weight values were 87.8pA with std 8.78pA
@@ -100,29 +101,34 @@ for c in range(0, 8):
                 # Synaptic weight from L4e to L2/3e is doubled
                 if c == 2 and r == 0:
                     # ranging between 16 and 24 in decimal
-                    probs = sc.norm.pdf(range(88, 93), loc=90, scale=1)
-                    probs /= sum(probs)
-                    con[-1].weight = np.random.choice(range(88, 93), size=nsyn, p=probs)
+                    sampled_var = np.rint(np.clip(90 + 1*np.random.randn(nsyn),
+                                                  min(fp8_values),
+                                                  max(fp8_values)))
+                    con[-1].weight = sampled_var
                 else:
                     # ranging between 8 and 12 in decimal
-                    probs = sc.norm.pdf(range(80, 85), loc=82, scale=1)
-                    probs /= sum(probs)
-                    con[-1].weight = np.random.choice(range(80, 85), size=nsyn, p=probs)
-                con[-1].delay = 'clip(1.5*ms + 0.75*ms*randn(), 0.1*ms, 1.5*ms*inf)'
+                    sampled_var = np.rint(np.clip(82 + 1*np.random.randn(nsyn),
+                                                  min(fp8_values),
+                                                  max(fp8_values)))
+                    con[-1].weight = sampled_var
+                sampled_var = np.rint(np.clip(1 + 1*randn(nsyn), 1, np.inf))
+                con[-1].delay = sampled_var*ms
 
             # Inhibitory connections
             else:
-                # ranging between 32 and 48 in decimal
-                probs = sc.norm.pdf(range(96, 101), loc=98, scale=1)
-                probs /= sum(probs)
-                con[-1].weight = np.random.choice(range(96, 101), size=nsyn, p=probs)
+                # ranging between 32 and 52 in decimal
+                sampled_var = np.rint(np.clip(98 + 1*np.random.randn(nsyn),
+                                              min(fp8_values),
+                                              max(fp8_values)))
+                con[-1].weight = sampled_var
                 con[-1].namespace['w_factor'] = 184  # -1 in decimal
-                con[-1].delay = 'clip(0.80*ms + 0.4*ms*randn(), 0.1*ms, 0.80*ms*inf)'
+                sampled_var = np.rint(np.clip(1 + 0.5*randn(nsyn), 1, np.inf))
+                con[-1].delay = sampled_var*ms
 
 bg_in  = []
 poisson_pop = []
 syn_model = fp8CUBA()
-syn_model.connection['p'] = .075
+syn_model.connection['p'] = .07
 for r in range(0, 8):
     poisson_pop.append(PoissonGroup(bg_layer[r], rates=bg_freq*Hz))
     bg_in.append(create_synapses(poisson_pop[-1], pop[r], syn_model))
