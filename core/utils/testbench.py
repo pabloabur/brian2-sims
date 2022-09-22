@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-""" This file is a modified version of the same code from Teili. See
+""" This file has modified versions of some code from Teili. See
 M. Milde, A. Renner, R. Krause, A. M. Whatley, S. Solinas, D. Zendrikov,
 N. Risi, M. Rasetto, K. Burelo, V. R. C. Leite. teili: A toolbox for building
 and testing neural algorithms and computational primitives using spiking neurons.
@@ -14,6 +14,76 @@ import operator
 from brian2 import SpikeGeneratorGroup, PoissonGroup
 from brian2 import Network, SpikeMonitor
 from brian2 import second, ms, Hz
+
+def create_item(input_indices, isi, num_spikes):
+    """
+    Parameters
+    ----------
+    input_indices : list of int
+        Indices of input channels that will be used to create item of a sequence
+    isi : int
+        Interspike interval of the spikes of item, in ms
+    num_spikes : int
+        Indicates how many spikes for the given item
+    """
+    indices = [x for x in input_indices]*num_spikes
+    times = np.repeat([x for x in range(0, num_spikes*isi, isi)],
+                      len(input_indices)).tolist()
+
+    return {'indices': indices, 'times': times}
+
+def create_sequence(items, intra_seq_dt):
+    """
+    Parameters
+    ----------
+    items : dict
+        Contains indices and relative times (keys should be 'indices' and 'time',
+        respectively) of items of the sequence to be created.
+    intra_seq_dt : int
+        Time gap between items in a sequence, in ms.
+    """
+    sequence_indices = []
+    sequence_times = []
+    last_t = 0
+    for i in items:
+        sequence_indices.extend(i['indices'])
+        sequence_times.extend([x+last_t for x in i['times']])
+        last_t = sequence_times[-1] + intra_seq_dt
+
+    return {'indices': sequence_indices,
+            'times': sequence_times}
+
+def create_testbench(sequences, occurences, inter_seq_dt, num_seq):
+    """
+    Parameters
+    ----------
+    sequences : list
+        Contains sequences to be used as testbench
+    occurences: list of float
+        Probabilities that each sequence has appear in the final testbench.
+    inter_seq_dt : int
+        Time gap between sequences, in ms
+    num_seq : int
+        Total number of sequences
+    """
+    testbench_indices = []
+    testbench_times = []
+    testbench = np.random.choice(sequences, num_seq, p=occurences)
+    events = []
+
+    last_t = 0
+    for seq in testbench:
+        # Finds to which class sample belongs to
+        for idx, label in enumerate(sequences):
+            if seq['indices'] == label['indices']:
+                events.append([idx])
+
+        testbench_indices.extend(seq['indices'])
+        testbench_times.extend([x+last_t for x in seq['times']])
+        events[-1].extend([last_t*ms, max(testbench_times)*ms])
+        last_t = testbench_times[-1] + inter_seq_dt
+
+    return testbench_indices, testbench_times, events
 
 def delete_doublets(spiketimes, indices, verbose=False):
     """

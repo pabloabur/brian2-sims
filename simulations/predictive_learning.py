@@ -14,9 +14,10 @@ from brian2tools import brian_plot
 
 from brian2 import ms, mA, mV, second, prefs, SpikeMonitor, StateMonitor,\
         defaultclock, ExplicitStateUpdater, set_device, device,\
-        Network, collect, get_device, profiling_summary
+        Network, collect, get_device, profiling_summary, SpikeGeneratorGroup
 
-from core.utils.testbench import SequenceTestbench
+from core.utils.testbench import SequenceTestbench, create_item,\
+        create_sequence, create_testbench
 from core.utils.misc import neuron_group_from_spikes
 
 import sys
@@ -126,37 +127,6 @@ spike_times = []
 #sequence_duration = sequence.cycle_length * ms + time_gap*num_items*ms
 
 # This input is very specific for this case.
-def create_item(input_indices, isi, num_spikes):
-    indices = [x for x in input_indices]*num_spikes
-    times = np.repeat([x for x in range(0, num_spikes*isi, isi)],
-                      len(input_indices)).tolist()
-
-    return {'indices': indices, 'times': times}
-
-def create_sequence(items, intra_seq_dt):
-    sequence_indices = []
-    sequence_times = []
-    last_t = 0
-    for i in items:
-        sequence_indices.extend(i['indices'])
-        sequence_times.extend([x+last_t for x in i['times']])
-        last_t = sequence_times[-1] + intra_seq_dt
-
-    return {'indices': sequence_indices,
-            'times': sequence_times}
-
-def create_testbench(sequences, occurences, inter_seq_dt, num_seq):
-    testbench_indices = []
-    testbench_times = []
-    testbench = np.random.choice(sequences, num_seq, p=occurences)
-    last_t = 0
-    for seq in testbench:
-        testbench_indices.extend(seq['indices'])
-        testbench_times.extend([x+last_t for x in seq['times']])
-        last_t = testbench_times[-1] + inter_seq_dt
-
-    return testbench_indices, testbench_times
-
 isi = np.ceil(1/item_rate*1000).astype(int)
 item_spikes = 3
 A = create_item([0], isi, item_spikes)
@@ -173,11 +143,16 @@ seq2 = [H, G, F, E, D, C, B, A]
 seq1 = create_sequence(seq1, 0)
 seq2 = create_sequence(seq2, 0)
 
-# TODO these have to be set manually, apparently
-ch_groups = 1
-num_items = 8#len(np.unique(seq1['indices'] + seq2['indices']))
+channels_per_item = 1
+num_items = 8
+num_seq = 2
+print(f'Simulation with {num_seq} sequences, each having {num_items} '
+      f'items represented by {channels_per_item} input channels')
 
-input_indices, input_times = create_testbench([seq1, seq2], [.5, .5], 40, repetitions)
+input_indices, input_times, events = create_testbench([seq1, seq2],
+                                                      [.5, .5],
+                                                      40,
+                                                      repetitions)
 input_indices = np.array(input_indices)
 input_times = np.array(input_times) * ms
 sequence_duration = max(seq1['times']) * ms
@@ -350,12 +325,11 @@ for neu_group, plast in pops['plast'].items():
         for modifier in params_modifier[neu_group]:
             neu_model.modify_model(**modifier)
     column[neu_group] = create_neurons(pops[f'num_{target}'], neu_model)
-
-# add connections
-# TODO more connections here, should go to final param dict
+# add connections missing connections
 conn_desc['pyr_pv']['connection']['p'] = 0.79
 conn_desc['pyr_sst']['connection']['p'] = 0.79
 conn_desc['pyr_vip']['connection']['p'] = 0.79
+
 for conn, conn_vals in conn_desc.items():
     source, target = conn.split('_')[0], conn.split('_')[1]
     if conn_vals['plast'] == 'static':
@@ -403,7 +377,19 @@ readout = create_neurons(num_items, neu_model, name='readout')
 neu_model = LIF()
 neu_model.modify_model('model', 'gtot = gtot0 + gtot1', old_expr='gtot = gtot0')
 neu_model.model += 'gtot1 : volt\n'
-inh_readout = create_neurons(num_items, neu_model, name='inh_readout')
+readout2 = create_neurons(num_seq, neu_model, name='readout2')
+
+labels_indices = []
+labels_times = []
+for ev in events:
+    labels_indices.append(ev[0])
+    labels_times.append(ev[2])
+labels = SpikeGeneratorGroup(num_seq, labels_indices, labels_times)
+
+neu_model = LIF()
+neu_model.modify_model('model', 'gtot = gtot0 + gtot1', old_expr='gtot = gtot0')
+neu_model.model += 'gtot1 : volt\n'
+inhreadout = create_neurons(num_items, neu_model, name='inhreadout')
 #readout = Neurons(
 #    num_items,
 #    equation_builder=pop_desc.models['static'](num_inputs=2),
@@ -418,12 +404,12 @@ syn_model = CUBA()
 #conn_desc.filter_params()
 syn_model.modify_model('connection', np.unique(input_indices), key='i')
 syn_model.modify_model('connection',
-                       np.repeat([x for x in range(num_items)], ch_groups),
+                       np.repeat([x for x in range(num_items)], channels_per_item),
                        key='j')
 syn_model.modify_model('parameters', 40*mV, key='weight')
 column['ff_pyr'].namespace['w_factor'] = 2
 input_readout = create_synapses(column['ff_cells'], readout, syn_model, name='input_readout')
-input_inhreadout = create_synapses(column['ff_cells'], inh_readout, syn_model, name='input_inhreadout')
+input_inhreadout = create_synapses(column['ff_cells'], inhreadout, syn_model, name='input_inhreadout')
 input_readout.active = False
 input_inhreadout.active = False
 
@@ -432,13 +418,13 @@ syn_model.modify_model('connection', 'i', key='j')
 syn_model.modify_model('model', 'gtot2_post', old_expr='gtot0_post')
 syn_model.modify_model('parameters', 40*mV, key='weight')
 syn_model.modify_model('namespace', -1, key='w_factor')
-inhreadout_readout = create_synapses(inh_readout, readout, syn_model, name='inhreadout_readout')
+inhreadout_readout = create_synapses(inhreadout, readout, syn_model, name='inhreadout_readout')
 
 syn_model = CUBA()
 syn_model.modify_model('connection', 'i', key='j')
 syn_model.modify_model('model', 'gtot1_post', old_expr='gtot0_post')
 syn_model.modify_model('parameters', 40*mV, key='weight')
-readout_inhreadout = create_synapses(readout, inh_readout, syn_model, name='readout_inhreadout')
+readout_inhreadout = create_synapses(readout, inhreadout, syn_model, name='readout_inhreadout')
 
 #input_readout = Connections(
 #    relay_cells, readout,
@@ -450,6 +436,19 @@ readout_inhreadout = create_synapses(readout, inh_readout, syn_model, name='read
 #                      j=np.repeat([x for x in range(num_items)], 4))
 #input_readout.set_params(conn_desc.base_vals['ff_pyr'])
 #input_readout.weight = 9
+
+syn_model = CUBA()
+syn_model.model += 'tdiff : second\n'
+syn_model.on_post += f'tdiff = clip(t - lastspike_pre, 0*ms, {sequence_duration/ms}*ms)\n'
+pyr_readout2 = create_synapses(column['pyr_cells'], readout2, syn_model,
+                               name='pyr_readout2')
+
+syn_model = CUBA()
+syn_model.modify_model('connection', 'i', key='j')
+syn_model.modify_model('model', 'gtot1_post', old_expr='gtot0_post')
+syn_model.modify_model('namespace', 100, key='w_factor')
+label_readout2 = create_synapses(labels, readout2, syn_model,
+                                 name='label_readout2')
 
 syn_model = hSTDP()
 syn_model.modify_model('model', 'gtot1_post', old_expr='gtot0_post')
@@ -468,11 +467,6 @@ pyr_readout = create_synapses(column['pyr_cells'], readout, syn_model, name='pyr
 pyr_readout.run_regularly('w_plast = clip(w_plast - h_eta*heterosyn_factor, 0*volt, w_max)',
                            dt=1*ms)
 pyr_readout.active = False
-
-column['readout'] = readout
-column['ff_readout'] = input_readout
-column['ff_inhreadout'] = input_inhreadout
-column['pyr_readout'] = pyr_readout
 
 # Prepare for saving data
 date_time = datetime.now()
@@ -529,8 +523,15 @@ sttmon_vm = StateMonitor(
     variables=['Vm', 'gtot0', 'gtot1', 'gtot2'],
     record=True,
     dt=1*ms)
+sttmon_r2 = StateMonitor(
+    readout2,
+    variables=['Vm'],
+    record=True,
+    dt=1*ms)
 sttmon_w = StateMonitor(pyr_readout, variables=['w_plast', 'g'], record=True)
+sttmon_w2 = StateMonitor(pyr_readout2, variables=['tdiff'], record=True)
 spkmon_r = SpikeMonitor(readout, name='readoutmon')
+spkmon_r2 = SpikeMonitor(readout2, name='readoutmon2')
 
 #conn_desc = ConnectionDescriptor('L4', 'intra')
 #conn_desc.plasticities['pyr_pyr'] = 'stdp'
@@ -597,6 +598,16 @@ if testing_duration:
     pyr_readout.namespace['eta'] = 0*mV
 
     #testing_code(column.col_groups['L4'])
+
+    # Average delays captured during simulations
+    delays =  sttmon_w2.tdiff[:, np.in1d(sttmon_w2.t, spkmon_r2.t)]
+    avg_delays = np.average(delays, axis=1)
+    # values are already in the right position relative to delay. You can
+    # check that by looking at last recorded values reshaped like
+    # (column['pyr_cells'].N, num_seq) and compare it with e.g. tdiff['j==0']
+    pyr_readout2.delay = (avg_delays/ms).astype(int)*ms
+    label_readout2.namespace['w_factor'] = 0
+    readout2.namespace['Vthr'] = 9*mV
 
     Net.run(testing_duration, namespace={}, profile=True)
     if get_device().__class__.__name__ == 'CPPStandaloneDevice':
@@ -687,7 +698,8 @@ if not quiet:
     plot_state(sttmon_w.t, np.sum(sttmon_w.w_plast[pyr_readout.j==0, :].T, axis=1), var_name='w_plast')
     plt.title('weights projecting into neuron 0')
 
-    fig, (ax1, ax2, ax3) = plt.subplots(3, 1, sharex=True)
+    fig, (ax0, ax1, ax2, ax3) = plt.subplots(4, 1, sharex=True)
+    brian_plot(spkmon_r2, axes=ax0)
     brian_plot(spkmon_r, axes=ax1)
     ax1.vlines((sim_duration-testing_duration)/ms, -1, 9, linestyles='dotted')
     ax2.plot(L4_times, L4_ids, '.')
@@ -702,7 +714,7 @@ if not quiet:
     plt.figure()
     fmat = _float_connection_matrix(column['ff_pyr'].i, column['ff_pyr'].j, column['ff_pyr'].w_plast)
     plt.imshow(fmat.T[:, permutation_ids])
-    omat = _float_connection_matrix(column['pyr_readout'].i, column['pyr_readout'].j, column['pyr_readout'].w_plast)
+    omat = _float_connection_matrix(pyr_readout.i, pyr_readout.j, pyr_readout.w_plast)
     plt.figure()
     plt.imshow(omat[:, permutation_ids])
     plt.show()
