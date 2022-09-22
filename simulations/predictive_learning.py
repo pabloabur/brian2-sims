@@ -65,7 +65,7 @@ prefs.codegen.target = "numpy"
 #set_device('cpp_standalone', directory='output', build_on_run=False)
 #set_device('markdown', filename='model_description')
 rng = np.random.default_rng(12345)
-defaultclock.dt = .1*ms # TODO 1ms
+defaultclock.dt = 1*ms
 
 # Initialize input sequence
 item_duration = 20
@@ -158,21 +158,24 @@ def create_testbench(sequences, occurences, inter_seq_dt, num_seq):
     return testbench_indices, testbench_times
 
 isi = np.ceil(1/item_rate*1000).astype(int)
-ch_groups = 4
-A = create_item([0,1,2,3], isi, 3)
-B = create_item([4,5,6,7], isi, 3)
-C = create_item([8,9,10,11], isi, 3)
-D = create_item([12,13,14,15], isi, 3)
-E = create_item([16,17,18,19], isi, 3)
-F = create_item([20,21,22,23], isi, 3)
-G = create_item([24,25,26,27], isi, 3)
-H = create_item([28,29,30,31], isi, 3)
+item_spikes = 3
+A = create_item([0], isi, item_spikes)
+B = create_item([1], isi, item_spikes)
+C = create_item([2], isi, item_spikes)
+D = create_item([3], isi, item_spikes)
+E = create_item([4], isi, item_spikes)
+F = create_item([5], isi, item_spikes)
+G = create_item([6], isi, item_spikes)
+H = create_item([7], isi, item_spikes)
 
-seq1 = [A, B, C, D]
-seq2 = [E, F, G, H]
-num_items = len(seq1 + seq2)
+seq1 = [A, B, C, D, E, F, G, H]
+seq2 = [H, G, F, E, D, C, B, A]
 seq1 = create_sequence(seq1, 0)
 seq2 = create_sequence(seq2, 0)
+
+# TODO these have to be set manually, apparently
+ch_groups = 1
+num_items = 8#len(np.unique(seq1['indices'] + seq2['indices']))
 
 input_indices, input_times = create_testbench([seq1, seq2], [.5, .5], 40, repetitions)
 input_indices = np.array(input_indices)
@@ -248,7 +251,7 @@ for key in conn_desc:
 conn_desc['pyr_pyr']['connection']['p'] = 1.0
 conn_desc['pyr_pyr']['plast'] = 'hstdp'
 conn_desc['sst_pv']['plast'] = 'static'
-conn_desc['ff_pyr']['plast'] = 'static' # TODO stdp
+conn_desc['ff_pyr']['plast'] = 'stdp'
 
 # Removing things not used for network
 conn_desc = {key: val for key, val in conn_desc.items() if 'fb_' not in key}
@@ -272,7 +275,7 @@ tau_m_sample = {'attr': 'parameters', 'key': 'tau_m',
 refrac_period = {'attr': 'refractory', 'new_expr': '3*ms'}
 inh_sign = {'attr': 'namespace', 'key': 'w_factor', 'new_expr': -1}
 inh_w = {'attr': 'parameters', 'key': 'weight',
-         'new_expr': 'clip(40 + randn(), 0, inf)*mV'} # TODO back to 2
+         'new_expr': 'clip(2 + randn(), 0, inf)*mV'}
 plast_inh_w = {'attr': 'parameters', 'key': 'w_plast',
                'new_expr': 'clip(2 + randn(), 0, inf)*mV'}
 tau_syn_sample = {'attr': 'parameters', 'key': 'tau_syn',
@@ -291,7 +294,7 @@ sample_itrace = {'attr': 'parameters', 'key': 'tau_itrace',
                  'new_expr': 'clip(20 + 2*randn(), 0, inf)*ms'}
 sample_jtrace = {'attr': 'parameters', 'key': 'tau_jtrace',
                  'new_expr': 'clip(30 + 2*randn(), 0, inf)*ms'}
-syn_competition = {'attr': 'namespace', 'key': 'w_lim', 'new_expr': 35*mV}# TODO was 100
+syn_competition = {'attr': 'namespace', 'key': 'w_lim', 'new_expr': 100*mV}
 max_we = {'attr': 'namespace', 'key': 'w_max', 'new_expr': 35*mV}
 
 params_modifier = {
@@ -301,19 +304,14 @@ params_modifier = {
     'sst_cells': [tau_m_sample, refrac_period],
     'vip_cells': [tau_m_sample, refrac_period],
     # inhibitory connections
-    # TODO and sst_pyr like below
     'pv_pyr': [inh_sign, tau_syn_sample, plast_inh_w, sample_itrace, sample_jtrace],
-    #'pv_pyr': [inh_sign, tau_syn_sample, inh_w],
     'pv_pv': [inh_sign, tau_syn_sample, inh_w],
     'sst_pyr': [inh_sign, tau_syn_sample, plast_inh_w, sample_itrace, sample_jtrace],
-    #'sst_pyr': [inh_sign, tau_syn_sample, inh_w],
-    'sst_pv': [inh_sign, tau_syn_sample],
-    'sst_vip': [inh_sign, tau_syn_sample],
-    'vip_sst': [inh_sign, tau_syn_sample],
+    'sst_pv': [inh_sign, tau_syn_sample, inh_w],
+    'sst_vip': [inh_sign, tau_syn_sample, inh_w],
+    'vip_sst': [inh_sign, tau_syn_sample, inh_w],
     # excitatory connections
-    'ff_pyr' : [tau_syn_sample, static_inp_w],
-    # TODO stdp below
-    #'ff_pyr' : [tau_syn_sample, plastic_inp_w, sample_itrace, sample_jtrace],
+    'ff_pyr' : [tau_syn_sample, plastic_inp_w, sample_itrace, sample_jtrace],
     'ff_pv' : [tau_syn_sample, static_inp_w],
     'ff_sst' : [tau_syn_sample, static_inp_w],
     'ff_vip' : [tau_syn_sample, static_inp_w],
@@ -354,10 +352,7 @@ for neu_group, plast in pops['plast'].items():
     column[neu_group] = create_neurons(pops[f'num_{target}'], neu_model)
 
 # add connections
-# TODO no istdp
-#conn_desc['pv_pyr']['plast'] = 'static'
-#conn_desc['pv_pyr']['plast'] = 'static'
-# TODO more connections here
+# TODO more connections here, should go to final param dict
 conn_desc['pyr_pv']['connection']['p'] = 0.79
 conn_desc['pyr_sst']['connection']['p'] = 0.79
 conn_desc['pyr_vip']['connection']['p'] = 0.79
@@ -425,7 +420,8 @@ syn_model.modify_model('connection', np.unique(input_indices), key='i')
 syn_model.modify_model('connection',
                        np.repeat([x for x in range(num_items)], ch_groups),
                        key='j')
-syn_model.modify_model('parameters', 18*mV, key='weight')
+syn_model.modify_model('parameters', 40*mV, key='weight')
+column['ff_pyr'].namespace['w_factor'] = 2
 input_readout = create_synapses(column['ff_cells'], readout, syn_model, name='input_readout')
 input_inhreadout = create_synapses(column['ff_cells'], inh_readout, syn_model, name='input_inhreadout')
 input_readout.active = False
@@ -434,14 +430,14 @@ input_inhreadout.active = False
 syn_model = CUBA()
 syn_model.modify_model('connection', 'i', key='j')
 syn_model.modify_model('model', 'gtot2_post', old_expr='gtot0_post')
-syn_model.modify_model('parameters', 18*mV, key='weight')
+syn_model.modify_model('parameters', 40*mV, key='weight')
 syn_model.modify_model('namespace', -1, key='w_factor')
 inhreadout_readout = create_synapses(inh_readout, readout, syn_model, name='inhreadout_readout')
 
 syn_model = CUBA()
 syn_model.modify_model('connection', 'i', key='j')
 syn_model.modify_model('model', 'gtot1_post', old_expr='gtot0_post')
-syn_model.modify_model('parameters', 18*mV, key='weight')
+syn_model.modify_model('parameters', 40*mV, key='weight')
 readout_inhreadout = create_synapses(readout, inh_readout, syn_model, name='readout_inhreadout')
 
 #input_readout = Connections(
@@ -465,7 +461,7 @@ syn_model.modify_model('model', '',
     old_expr='+ int(outgoing_factor > 0*volt)*outgoing_factor ')
 syn_model.modify_model('model', 'incoming_weightsO',
     old_expr='incoming_weights')
-syn_model.namespace['w_lim'] = 100*mV # TODO was 65
+syn_model.namespace['w_lim'] = 65*mV
 syn_model.parameters['w_plast'] = 10*mV
 syn_model.namespace['h_eta'] = .0005
 pyr_readout = create_synapses(column['pyr_cells'], readout, syn_model, name='pyr_readout')
@@ -551,9 +547,6 @@ spkmon_r = SpikeMonitor(readout, name='readoutmon')
 #pyr_readout.weight = 0
 
 # Training
-# TODO back to FFI
-column['ff_pv'].namespace['w_factor'] = 0
-column['ff_sst'].namespace['w_factor'] = 0
 Net = Network(collect())
 #Net.add([x for x in column.col_groups.values()])
 Net.add(list(column.values()))
@@ -707,7 +700,7 @@ if not quiet:
 
     rmat = _float_connection_matrix(column['pyr_pyr'].i, column['pyr_pyr'].j, column['pyr_pyr'].w_plast)
     plt.figure()
-    fmat = _float_connection_matrix(column['ff_pyr'].i, column['ff_pyr'].j, column['ff_pyr'].weight) # TODO w_plast for stdp
+    fmat = _float_connection_matrix(column['ff_pyr'].i, column['ff_pyr'].j, column['ff_pyr'].w_plast)
     plt.imshow(fmat.T[:, permutation_ids])
     omat = _float_connection_matrix(column['pyr_readout'].i, column['pyr_readout'].j, column['pyr_readout'].w_plast)
     plt.figure()

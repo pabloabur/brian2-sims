@@ -249,11 +249,11 @@ params_modifier = {
     'vip_cells': [tau_m_sample, refrac_period],
     # inhibitory connections
     'pv_pyr': [inh_sign, tau_syn_sample, plast_inh_w, sample_itrace, sample_jtrace],
-    'pv_pv': [inh_sign, tau_syn_sample],
+    'pv_pv': [inh_sign, tau_syn_sample, inh_w],
     'sst_pyr': [inh_sign, tau_syn_sample, plast_inh_w, sample_itrace, sample_jtrace],
     'sst_pv': [inh_sign, tau_syn_sample, inh_w],
-    'sst_vip': [inh_sign, tau_syn_sample],
-    'vip_sst': [inh_sign, tau_syn_sample],
+    'sst_vip': [inh_sign, tau_syn_sample, inh_w],
+    'vip_sst': [inh_sign, tau_syn_sample, inh_w],
     # excitatory connections
     'ff_pyr' : [tau_syn_sample, plastic_inp_w, sample_itrace, sample_jtrace],
     'ff_pv' : [tau_syn_sample, static_inp_w],
