@@ -30,7 +30,7 @@ seed(s)
 defaultclock.dt = 1*ms
 set_device('cpp_standalone', directory='/scratch/lf11/pu6813/code')
 
-bg_freq = 8.0                    # default value for background rate
+bg_freq = 50.0                    # default value for background rate
 
 """ =================== Parameters =================== """
 ###############################################################################
@@ -101,34 +101,34 @@ for c in range(0, 8):
                 # Synaptic weight from L4e to L2/3e is doubled
                 if c == 2 and r == 0:
                     # ranging between 16 and 24 in decimal
-                    sampled_var = np.rint(np.clip(90 + 1*np.random.randn(nsyn),
+                    sampled_var = np.rint(np.clip(66 + 10*np.random.randn(nsyn),
                                                   min(fp8_values),
                                                   max(fp8_values)))
                     con[-1].weight = sampled_var
                 else:
                     # ranging between 8 and 12 in decimal
-                    sampled_var = np.rint(np.clip(82 + 1*np.random.randn(nsyn),
+                    sampled_var = np.rint(np.clip(58 + 10*np.random.randn(nsyn),
                                                   min(fp8_values),
                                                   max(fp8_values)))
                     con[-1].weight = sampled_var
-                sampled_var = np.rint(np.clip(1 + 1*randn(nsyn), 1, np.inf))
+                sampled_var = np.rint(np.clip(1 + 2*randn(nsyn), 1, np.inf))
                 con[-1].delay = sampled_var*ms
 
             # Inhibitory connections
             else:
                 # ranging between 32 and 52 in decimal
-                sampled_var = np.rint(np.clip(98 + 1*np.random.randn(nsyn),
+                sampled_var = np.rint(np.clip(74 + 10*np.random.randn(nsyn),
                                               min(fp8_values),
                                               max(fp8_values)))
                 con[-1].weight = sampled_var
                 con[-1].namespace['w_factor'] = 184  # -1 in decimal
-                sampled_var = np.rint(np.clip(1 + 0.5*randn(nsyn), 1, np.inf))
+                sampled_var = np.rint(np.clip(1 + 1*randn(nsyn), 1, np.inf))
                 con[-1].delay = sampled_var*ms
 
 bg_in  = []
 poisson_pop = []
 syn_model = fp8CUBA()
-syn_model.connection['p'] = .07
+syn_model.connection['p'] = .03
 for r in range(0, 8):
     poisson_pop.append(PoissonGroup(bg_layer[r], rates=bg_freq*Hz))
     bg_in.append(create_synapses(poisson_pop[-1], pop[r], syn_model))
