@@ -25,7 +25,7 @@ defaultclock.dt = 1*ms
 if backend == 'numpy':
     prefs.codegen.target = backend
 elif backend == 'cpp_standalone':
-    set_device(backend)
+    set_device(backend, build_on_run=False)
 elif backend == 'markdown':
     set_device('markdown', filename='model_description')
 else:

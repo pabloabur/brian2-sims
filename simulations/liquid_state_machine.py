@@ -23,11 +23,6 @@ from brian2tools import brian_plot, plot_state
 
 
 def liquid_state_machine(defaultclock, trial_no, path, quiet):
-    # TODO setting this test
-    record_delay=False
-    seed(42)
-    np.random.seed(42)
-
     item_rate = 128
     repetitions = 30
     inter_spk_interval = np.ceil(1/item_rate*1000).astype(int)
@@ -61,13 +56,14 @@ def liquid_state_machine(defaultclock, trial_no, path, quiet):
     sequence_duration = max(seq1['times']) * ms
     num_channels = int(max(input_indices) + 1)
     sim_dur = np.max(input_times)
+    test_dur = 1000*ms
     input_spikes = SpikeGeneratorGroup(num_channels,
                                        input_indices,
                                        input_times)
 
     # TODO sizes from 128, 256, 512, 1024, 2048, 4096. Original was 4084
-    Nt = 128
-    Ne, Ni = np.rint(Nt*.85), np.rint(Nt*.15)
+    Nt = 4096
+    Ne, Ni = np.rint(Nt*.85).astype(int), np.rint(Nt*.15).astype(int)
 
     neu_model = fp8LIF()
     cells = create_neurons(Ne+Ni, neu_model)
@@ -102,13 +98,13 @@ def liquid_state_machine(defaultclock, trial_no, path, quiet):
     labels = SpikeGeneratorGroup(num_seq, labels_indices, labels_times)
 
     e_syn_model = fp8CUBA()
-    e_syn_model.model += 'tdiff : second\n'
-    e_syn_model.on_post += f'tdiff = clip(t - lastspike_pre, 0*ms, {sequence_duration/ms}*ms)\n'
-    if record_delay:
-        e_syn_model.modify_model('namespace', 0, key='w_factor')
-    else:
-        # TODO small weights e.g. 10 get stuck, high explodes e.g. 56. 1 kindda works
-        e_syn_model.modify_model('parameters', 1, key='weight')
+    e_syn_model.model += 'delta_t : second\ndelay_proxy : second\n'
+    # TODO delays with 129 are to be pruned
+    e_syn_model.on_post += f'delta_t = clip(t - lastspike_pre, 0*ms, {sequence_duration/ms + 1}*ms)\n'
+    e_syn_model.on_post += f'delay_proxy = delay_proxy - .1*(delay_proxy - delta_t)\n'
+    e_syn_model.parameters = {**e_syn_model.parameters, 'delay_proxy': '0*ms'}
+    # TODO below only for large net
+    e_syn_model.modify_model('parameters', 1, key='weight')
     exc_readout = create_synapses(exc_cells, readout, e_syn_model,
                                    name='exc_readout')
 
@@ -117,11 +113,6 @@ def liquid_state_machine(defaultclock, trial_no, path, quiet):
     e_syn_model.modify_model('parameters', 115, key='weight')
     label_readout = create_synapses(labels, readout, e_syn_model,
                                      name='label_readout')
-
-    if not record_delay:
-        delays = np.load('delays.npy')
-        exc_readout.delay = delays*ms
-        label_readout.namespace['w_factor'] = 0
 
     selected_exc_cells = np.random.choice(Ne, 4, replace=False)
     selected_inh_cells = np.random.choice(Ni, 4, replace=False)
@@ -144,17 +135,17 @@ def liquid_state_machine(defaultclock, trial_no, path, quiet):
                             record=selected_inh_cells)
     sttmon_ro = StateMonitor(readout, variables='Vm',
                             record=[0, 1])
-    sttmon_d = StateMonitor(exc_readout, variables='tdiff',
-                            record=range(exc_cells.N*readout.N))
 
     kernel = kernels.GaussianKernel(sigma=30*q.ms)
-    run(sim_dur)
+    run(sim_dur-test_dur)
 
-    if record_delay:
-        # Average delays captured during simulations
-        delays = sttmon_d.tdiff[:, np.in1d(sttmon_d.t, spkmon_ro.t)]
-        delays = (np.average(delays, axis=1)/ms).astype(int)
-        np.save('delays', delays)
+    exc_readout.delay = 'delay_proxy'
+    # TODO e_neu_model.modify_model('namespace', decimal2minifloat(30), key='Vthr')
+    # TODO small weights e.g. 10 get stuck, high explodes e.g. 56. 1 kindda works. 60 for small net
+    #e_syn_model.modify_model('parameters', 60, key='weight')
+    label_readout.namespace['w_factor'] = 0
+    run(test_dur)
+    device.build()
 
     fig,  (ax0, ax1, ax2) = plt.subplots(3, 1, sharex=True)
     plot_state(sttmon_ro.t, minifloat2decimal(sttmon_ro.Vm[0]), axes=ax0)
@@ -185,7 +176,8 @@ def liquid_state_machine(defaultclock, trial_no, path, quiet):
         fig, ax1 = plt.subplots()
         ax2 = ax1.twinx()
         ax2.plot(pop_rates.times, pop_avg_rates, color='red')
-        brian_plot(spkmon_e, marker=',', color='black', axes=ax1)
+        # TODO brian_plot(spkmon_e, marker=',', color='black', axes=ax1)
+        brian_plot(spkmon_e, color='black', axes=ax1)
         ax1.set_xlabel(f'time ({pop_rates.times.dimensionality.latex})')
         ax1.set_ylabel('neuron number')
         ax2.set_ylabel(f'rate ({pop_rates.dimensionality})')
