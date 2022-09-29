@@ -71,7 +71,6 @@ def liquid_state_machine(defaultclock, trial_no, path, quiet):
     inh_cells = cells[Ne:]
 
     e_syn_model = fp8CUBA()
-    # TODO weight was 10(dec) and p .25
     e_syn_model.connection['p'] = .12
     e_syn_model.modify_model('parameters', decimal2minifloat(56), key='weight')
     thl_conns = create_synapses(input_spikes, cells, e_syn_model)
@@ -83,7 +82,7 @@ def liquid_state_machine(defaultclock, trial_no, path, quiet):
     i_syn_model = fp8CUBA()
     i_syn_model.connection['p'] = .1
     i_syn_model.namespace['w_factor'] = decimal2minifloat(-1)
-    i_syn_model.parameters['weight'] = 110# TODO decimal2minifloat(48)
+    i_syn_model.parameters['weight'] = 110
     intra_inh = create_synapses(inh_cells, cells, i_syn_model)
 
     e_neu_model = fp8LIF()
@@ -99,7 +98,6 @@ def liquid_state_machine(defaultclock, trial_no, path, quiet):
 
     e_syn_model = fp8CUBA()
     e_syn_model.model += 'delta_t : second\ndelay_proxy : second\n'
-    # TODO delays with 129 are to be pruned
     e_syn_model.on_post += f'delta_t = clip(t - lastspike_pre, 0*ms, {sequence_duration/ms + 1}*ms)\n'
     e_syn_model.on_post += f'delay_proxy = delay_proxy - .1*(delay_proxy - delta_t)\n'
     e_syn_model.parameters = {**e_syn_model.parameters, 'delay_proxy': '0*ms'}
@@ -140,6 +138,7 @@ def liquid_state_machine(defaultclock, trial_no, path, quiet):
     run(sim_dur-test_dur)
 
     exc_readout.delay = 'delay_proxy'
+    exc_readout.weight['delta_t==129*ms'] = 0
     # TODO e_neu_model.modify_model('namespace', decimal2minifloat(30), key='Vthr')
     # TODO small weights e.g. 10 get stuck, high explodes e.g. 56. 1 kindda works. 60 for small net
     #e_syn_model.modify_model('parameters', 60, key='weight')
@@ -176,8 +175,7 @@ def liquid_state_machine(defaultclock, trial_no, path, quiet):
         fig, ax1 = plt.subplots()
         ax2 = ax1.twinx()
         ax2.plot(pop_rates.times, pop_avg_rates, color='red')
-        # TODO brian_plot(spkmon_e, marker=',', color='black', axes=ax1)
-        brian_plot(spkmon_e, color='black', axes=ax1)
+        brian_plot(spkmon_e, marker=',', color='black', axes=ax1)
         ax1.set_xlabel(f'time ({pop_rates.times.dimensionality.latex})')
         ax1.set_ylabel('neuron number')
         ax2.set_ylabel(f'rate ({pop_rates.dimensionality})')
