@@ -1,11 +1,14 @@
 from brian2 import SpikeMonitor, StateMonitor, SpikeGeneratorGroup
-from brian2 import run, ms, seed
-from brian2 import get_device, device
+from brian2 import run, ms, mV
+from brian2 import device
 
-from core.utils.misc import decimal2minifloat, minifloat2decimal
+from core.utils.misc import decimal2minifloat
 
 from core.equations.neurons.fp8LIF import fp8LIF
 from core.equations.synapses.fp8CUBA import fp8CUBA
+from core.equations.neurons.LIF import LIF
+from core.equations.synapses.CUBA import CUBA
+from core.equations.synapses.STDP import STDP
 from core.builder.groups_builder import create_synapses, create_neurons
 from core.utils.testbench import create_item, create_sequence, create_testbench
 
@@ -17,14 +20,20 @@ import neo
 import quantities as q
 from elephant import statistics, kernels
 from elephant.statistics import isi, cv
+from elephant.conversion import BinnedSpikeTrain
 
 from viziphant.statistics import plot_instantaneous_rates_colormesh
 from brian2tools import brian_plot, plot_state
 
+from sklearn.linear_model import LogisticRegression
+
 
 def liquid_state_machine(defaultclock, trial_no, path, quiet):
+    # TODO use only delay, as stdp does not give reasonable results
+    output_mod = 'delay'
+
     item_rate = 128
-    repetitions = 30
+    repetitions = 50
     inter_spk_interval = np.ceil(1/item_rate*1000).astype(int)
     item_spikes = 3
     A = create_item([0], inter_spk_interval, item_spikes)
@@ -62,7 +71,7 @@ def liquid_state_machine(defaultclock, trial_no, path, quiet):
                                        input_times)
 
     # TODO sizes from 128, 256, 512, 1024, 2048, 4096. Original was 4084
-    Nt = 4096
+    Nt = 128
     Ne, Ni = np.rint(Nt*.85).astype(int), np.rint(Nt*.15).astype(int)
 
     neu_model = fp8LIF()
@@ -85,8 +94,13 @@ def liquid_state_machine(defaultclock, trial_no, path, quiet):
     i_syn_model.parameters['weight'] = 110
     intra_inh = create_synapses(inh_cells, cells, i_syn_model)
 
-    e_neu_model = fp8LIF()
-    e_neu_model.modify_model('parameters', 55, key='alpha_refrac')
+    e_neu_model = LIF()
+    e_neu_model.modify_model('refractory', '20*ms', old_expr='1*ms')
+    e_neu_model.modify_model('model', 'gtot = gtot0 + gtot1',
+                             old_expr='gtot = gtot0')
+    e_neu_model.model += 'gtot1 : volt\n'
+    # variable to normalize incoming weights
+    e_neu_model.model += 'inc_w : volt\n'
     readout = create_neurons(num_seq, e_neu_model, name='readout')
 
     labels_indices = []
@@ -96,21 +110,55 @@ def liquid_state_machine(defaultclock, trial_no, path, quiet):
         labels_times.append(ev[2])
     labels = SpikeGeneratorGroup(num_seq, labels_indices, labels_times)
 
-    e_syn_model = fp8CUBA()
-    e_syn_model.model += 'delta_t : second\ndelay_proxy : second\n'
-    e_syn_model.on_post += f'delta_t = clip(t - lastspike_pre, 0*ms, {sequence_duration/ms + 1}*ms)\n'
-    e_syn_model.on_post += f'delay_proxy = delay_proxy - .1*(delay_proxy - delta_t)\n'
-    e_syn_model.parameters = {**e_syn_model.parameters, 'delay_proxy': '0*ms'}
-    # TODO below only for large net
-    e_syn_model.modify_model('parameters', 1, key='weight')
-    exc_readout = create_synapses(exc_cells, readout, e_syn_model,
-                                   name='exc_readout')
+    if output_mod == 'stdp':
+        e_syn_model = STDP()
+        e_syn_model.modify_model('on_pre', 'g_syn += w_plast',
+                                 old_expr='g += w_plast')
+        e_syn_model.modify_model('parameters', 0.02*mV, key='w_plast')
+        e_syn_model.modify_model('namespace', 10*mV, key='eta')
+        e_syn_model.modify_model('parameters',
+                                 f'{sequence_duration/ms}*rand()*ms',
+                                 key='delay')
+        e_syn_model.model += 'inc_w_post = w_plast : volt (summed)\n'
+        e_syn_model.on_post += 'w_plast = (w_plast/inc_w_post*mV)'
+    elif output_mod == 'delay':
+        e_syn_model = CUBA()
 
-    e_syn_model = fp8CUBA()
+        e_syn_model.modify_model('on_pre', 'g_syn += weight',
+                                 old_expr='g += weight')
+        e_syn_model.model += 'delta_t : second\ndelay_proxy : second\n'
+        e_syn_model.on_post += f'delta_t = clip(t - lastspike_pre, 0*ms, {sequence_duration/ms + 1}*ms)\n'
+        e_syn_model.on_post += 'delay_proxy = delay_proxy - 1*(delay_proxy - delta_t)\n'
+        e_syn_model.parameters = {**e_syn_model.parameters,
+                                  'delay_proxy': '0*ms'}
+        e_syn_model.modify_model('parameters', 0.02*mV, key='weight')
+    e_syn_model.modify_model('model', 'dg_syn/dt = alpha_syn*g_syn',
+                             old_expr='dg/dt = alpha_syn*g')
+    e_syn_model.modify_model('model', 'g_syn*w_factor',
+                             old_expr='g*w_factor')
+    e_syn_model.modify_model('model', 'tau_syn_syn', old_expr='tau_syn')
+    e_syn_model.parameters = {**e_syn_model.parameters,
+                              **{'tau_syn_syn': '5*ms'}}
+    e_syn_model.modify_model('model', 'alpha_syn_syn',
+                             old_expr='alpha_syn')
+    del e_syn_model.parameters['tau_syn']
+    e_syn_model.parameters = {**e_syn_model.parameters,
+                              **{'alpha_syn_syn': 'tau_syn_syn/(dt + tau_syn_syn)'}}
+    del e_syn_model.parameters['alpha_syn']
+    exc_readout = create_synapses(exc_cells, readout, e_syn_model,
+                                  name='exc_readout')
+
+    e_syn_model = CUBA()
+    e_syn_model.modify_model('model', 'dg_syn/dt = alpha_syn*g_syn',
+                             old_expr='dg/dt = alpha_syn*g')
+    e_syn_model.modify_model('model', 'gtot1_post = g_syn*w_factor',
+                             old_expr='gtot0_post = g*w_factor')
+    e_syn_model.modify_model('on_pre', 'g_syn += weight',
+                             old_expr='g += weight')
     e_syn_model.modify_model('connection', 'i', key='j')
-    e_syn_model.modify_model('parameters', 115, key='weight')
+    e_syn_model.modify_model('parameters', 200*mV, key='weight')
     label_readout = create_synapses(labels, readout, e_syn_model,
-                                     name='label_readout')
+                                    name='label_readout')
 
     selected_exc_cells = np.random.choice(Ne, 4, replace=False)
     selected_inh_cells = np.random.choice(Ni, 4, replace=False)
@@ -132,26 +180,41 @@ def liquid_state_machine(defaultclock, trial_no, path, quiet):
     sttmon_i = StateMonitor(inh_cells, variables='Vm',
                             record=selected_inh_cells)
     sttmon_ro = StateMonitor(readout, variables='Vm',
-                            record=[0, 1])
+                             record=[0, 1])
 
     kernel = kernels.GaussianKernel(sigma=30*q.ms)
     run(sim_dur-test_dur)
 
-    exc_readout.delay = 'delay_proxy'
-    exc_readout.weight['delta_t==129*ms'] = 0
-    # TODO e_neu_model.modify_model('namespace', decimal2minifloat(30), key='Vthr')
-    # TODO small weights e.g. 10 get stuck, high explodes e.g. 56. 1 kindda works. 60 for small net
-    #e_syn_model.modify_model('parameters', 60, key='weight')
+    if output_mod == 'delay':
+        exc_readout.delay = 'delay_proxy'
+        exc_readout.weight['delta_t==129*ms'] = 0*mV
+    # TODO small weights e.g. 10 get stuck, high explodes e.g. 56. 1 kindda
+    # works. 60 for small net
+    # e_syn_model.modify_model('parameters', 60, key='weight')
     label_readout.namespace['w_factor'] = 0
     run(test_dur)
     device.build()
 
-    fig,  (ax0, ax1, ax2) = plt.subplots(3, 1, sharex=True)
-    plot_state(sttmon_ro.t, minifloat2decimal(sttmon_ro.Vm[0]), axes=ax0)
-    plot_state(sttmon_ro.t, minifloat2decimal(sttmon_ro.Vm[1]), axes=ax0)
-    brian_plot(spkmon_e, axes=ax1)
-    ax2.plot(input_times/ms, input_indices, '.')
-    plt.show()
+    neo_spks = []
+    for spk_train in spkmon_e.spike_trains().values():
+        neo_spks.append(neo.SpikeTrain(spk_train/ms*q.ms,
+                                       t_stop=sim_dur/ms*q.ms))
+    data = BinnedSpikeTrain(neo_spks, bin_size=8*q.ms)
+    samples = []
+    for lt in labels_times:
+        # Not casting like below results in error!
+        ti = np.around(lt/ms - sequence_duration/ms).astype(int)*q.ms
+        tf = np.around(lt/ms).astype(int)*q.ms
+        temp_data = data.time_slice(ti, tf).to_array()
+        samples.append(temp_data.flatten())
+
+    test_size = 10
+    samples_size = len(labels_times)
+    train_size = samples_size-test_size
+    lr = LogisticRegression()
+    lr.fit(samples[:train_size], labels_indices[:train_size])
+    score = lr.score(samples[train_size:], labels_indices[train_size:])
+    print(f'Accuracy is {score}')
 
     temp_trains = spkmon_e.spike_trains()
     spk_trains = [neo.SpikeTrain(temp_trains[x]/ms, t_stop=sim_dur/ms, units='ms')
@@ -172,6 +235,12 @@ def liquid_state_machine(defaultclock, trial_no, path, quiet):
              rates=np.array(pop_avg_rates))
 
     if not quiet:
+        fig,  (ax0, ax1, ax2) = plt.subplots(3, 1, sharex=True)
+        plot_state(sttmon_ro.t, sttmon_ro.Vm[0], var_unit=mV, axes=ax0)
+        plot_state(sttmon_ro.t, sttmon_ro.Vm[1], var_unit=mV, axes=ax0)
+        brian_plot(spkmon_e, axes=ax1)
+        ax2.plot(input_times/ms, input_indices, '.')
+
         fig, ax1 = plt.subplots()
         ax2 = ax1.twinx()
         ax2.plot(pop_rates.times, pop_avg_rates, color='red')
