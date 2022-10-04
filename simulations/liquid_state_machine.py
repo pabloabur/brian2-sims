@@ -29,8 +29,15 @@ from sklearn.linear_model import LogisticRegression
 
 
 def liquid_state_machine(defaultclock, trial_no, path, quiet):
-    # TODO use only delay, as stdp does not give reasonable results
     output_mod = 'delay'
+    precision = 'fp64'
+
+    if precision == 'fp8':
+        liquid_neu = fp8LIF
+        liquid_syn = fp8CUBA
+    elif precision == 'fp64':
+        liquid_neu = LIF
+        liquid_syn = CUBA
 
     item_rate = 128
     repetitions = 50
@@ -71,27 +78,47 @@ def liquid_state_machine(defaultclock, trial_no, path, quiet):
                                        input_times)
 
     # TODO sizes from 128, 256, 512, 1024, 2048, 4096. Original was 4084
-    Nt = 128
+    Nt = 4096
     Ne, Ni = np.rint(Nt*.85).astype(int), np.rint(Nt*.15).astype(int)
 
-    neu_model = fp8LIF()
+    neu_model = liquid_neu()
+    if precision == 'fp64':
+        neu_model.modify_model('model',
+                               'gtot = gtot0 + gtot1 + gtot2 + gtot3',
+                               old_expr='gtot = gtot0')
+        neu_model.model += 'gtot1 : volt\ngtot2 : volt\ngtot3 : volt\n'
     cells = create_neurons(Ne+Ni, neu_model)
     exc_cells = cells[:Ne]
     inh_cells = cells[Ne:]
 
-    e_syn_model = fp8CUBA()
-    e_syn_model.connection['p'] = .12
-    e_syn_model.modify_model('parameters', decimal2minifloat(56), key='weight')
+    e_syn_model = liquid_syn()
+    e_syn_model.modify_model('connection', .12, key='p')
+    if precision == 'fp8':
+        e_syn_model.modify_model('parameters',
+                                 decimal2minifloat(56),
+                                 key='weight')
+    if precision == 'fp64':
+        e_syn_model.modify_model('parameters', 30*mV, key='weight')
+        e_syn_model.modify_model('model', 'gtot1_post', old_expr='gtot0_post')
     thl_conns = create_synapses(input_spikes, cells, e_syn_model)
 
-    e_syn_model = fp8CUBA()
-    e_syn_model.connection['p'] = .1
+    e_syn_model = liquid_syn()
+    e_syn_model.modify_model('connection', .1, key='p')
+    e_syn_model.modify_model('parameters', '20*rand()*ms', key='delay')
+    if precision == 'fp64':
+        e_syn_model.modify_model('model', 'gtot2_post', old_expr='gtot0_post')
+        e_syn_model.modify_model('parameters', 8*mV, key='weight')
     intra_exc = create_synapses(exc_cells, cells, e_syn_model)
 
-    i_syn_model = fp8CUBA()
-    i_syn_model.connection['p'] = .1
-    i_syn_model.namespace['w_factor'] = decimal2minifloat(-1)
-    i_syn_model.parameters['weight'] = 110
+    i_syn_model = liquid_syn()
+    i_syn_model.modify_model('connection', .1, key='p')
+    if precision == 'fp8':
+        i_syn_model.modify_model('namespace', decimal2minifloat(-1), key='w_factor')
+        i_syn_model.modify_model('parameters', 110, key='weight')
+    if precision == 'fp64':
+        i_syn_model.modify_model('namespace', -1, key='w_factor')
+        i_syn_model.modify_model('parameters', 170*mV, key='weight')
+        i_syn_model.modify_model('model', 'gtot3_post', old_expr='gtot0_post')
     intra_inh = create_synapses(inh_cells, cells, i_syn_model)
 
     e_neu_model = LIF()
@@ -167,8 +194,8 @@ def liquid_state_machine(defaultclock, trial_no, path, quiet):
                 'selected_inh_cells': selected_inh_cells.tolist(),
                 'dt': str(defaultclock.dt),
                 'trial_no': trial_no,
-                'duration': str(sim_dur*ms),
-                'inh_weight': i_syn_model.parameters['weight']}
+                'duration': str(sim_dur),
+                'inh_weight': str(i_syn_model.parameters['weight'])}
     with open(path+'metadata.json', 'w') as f:
         json.dump(Metadata, f)
 
@@ -195,6 +222,7 @@ def liquid_state_machine(defaultclock, trial_no, path, quiet):
     run(test_dur)
     device.build()
 
+    # Process data for measuring accuracy
     neo_spks = []
     for spk_train in spkmon_e.spike_trains().values():
         neo_spks.append(neo.SpikeTrain(spk_train/ms*q.ms,
@@ -214,7 +242,8 @@ def liquid_state_machine(defaultclock, trial_no, path, quiet):
     lr = LogisticRegression()
     lr.fit(samples[:train_size], labels_indices[:train_size])
     score = lr.score(samples[train_size:], labels_indices[train_size:])
-    print(f'Accuracy is {score}')
+    print('\n###################')
+    print(f'Accuracy is {score}\n')
 
     temp_trains = spkmon_e.spike_trains()
     spk_trains = [neo.SpikeTrain(temp_trains[x]/ms, t_stop=sim_dur/ms, units='ms')
