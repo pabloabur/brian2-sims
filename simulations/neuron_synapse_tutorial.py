@@ -32,7 +32,7 @@ input_spikegenerator = SpikeGeneratorGroup(1, indices=input_indices,
 neuron_model = LIF()
 test_neurons1 = create_neurons(2, neuron_model, name='std_neu1')
 test_neurons2 = create_neurons(2, neuron_model, name='std_neu2')
-test_neurons1.Iconst = 260*pA
+test_neurons1.Iconst = 400*pA
 
 synapse_model_test = CUBA()
 input_synapse = create_synapses(input_spikegenerator, test_neurons1,
@@ -51,10 +51,10 @@ test_neurons3.Iconst = decimal2minifloat(52)
 synapse_model_test2 = fp8CUBA()
 input_synapse2 = create_synapses(input_spikegenerator, test_neurons3,
                                  synapse_model_test2, name='fp8_syn1')
-input_synapse2.weight = decimal2minifloat(80)
+input_synapse2.weight = decimal2minifloat(96)
 test_synapse2 = create_synapses(test_neurons3, test_neurons4,
                                 synapse_model_test2, name='fp8_syn2')
-test_synapse2.weight = decimal2minifloat(52)
+test_synapse2.weight = decimal2minifloat(60)
 
 # TODO fix this; it is just to keep old stochastic parameters
 sim_type = 'not_stochastic' 
