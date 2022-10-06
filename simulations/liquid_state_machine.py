@@ -1,12 +1,14 @@
 from brian2 import SpikeMonitor, StateMonitor, SpikeGeneratorGroup
 from brian2 import run, ms, mV
 from brian2 import device
+from brian2 import TimedArray
 
 from core.utils.misc import decimal2minifloat
 
 from core.equations.neurons.fp8LIF import fp8LIF
 from core.equations.synapses.fp8CUBA import fp8CUBA
 from core.equations.neurons.LIF import LIF
+from core.equations.neurons.LIFIP import LIFIP
 from core.equations.synapses.CUBA import CUBA
 from core.equations.synapses.STDP import STDP
 from core.builder.groups_builder import create_synapses, create_neurons
@@ -15,6 +17,7 @@ from core.utils.testbench import create_item, create_sequence, create_testbench
 import numpy as np
 import matplotlib.pyplot as plt
 import json
+from random import uniform
 
 import neo
 import quantities as q
@@ -29,7 +32,7 @@ from sklearn.linear_model import LogisticRegression
 
 
 def liquid_state_machine(defaultclock, trial_no, path, quiet):
-    output_mod = 'delay'
+    output_mod = 'stdp'
     precision = 'fp64'
 
     if precision == 'fp8':
@@ -40,9 +43,10 @@ def liquid_state_machine(defaultclock, trial_no, path, quiet):
         liquid_syn = CUBA
 
     item_rate = 128
-    repetitions = 50
+    repetitions = 100
     inter_spk_interval = np.ceil(1/item_rate*1000).astype(int)
-    item_spikes = 3
+    inter_seq_interval = 200
+    item_spikes = 1
     A = create_item([0], inter_spk_interval, item_spikes)
     B = create_item([1], inter_spk_interval, item_spikes)
     C = create_item([2], inter_spk_interval, item_spikes)
@@ -54,8 +58,8 @@ def liquid_state_machine(defaultclock, trial_no, path, quiet):
 
     seq1 = [A, B, C, D, E, F, G, H]
     seq2 = [H, G, F, E, D, C, B, A]
-    seq1 = create_sequence(seq1, 0)
-    seq2 = create_sequence(seq2, 0)
+    seq1 = create_sequence(seq1, inter_spk_interval)
+    seq2 = create_sequence(seq2, inter_spk_interval)
 
     channels_per_item = 1
     num_items = 8
@@ -65,29 +69,36 @@ def liquid_state_machine(defaultclock, trial_no, path, quiet):
 
     input_indices, input_times, events = create_testbench([seq1, seq2],
                                                           [.5, .5],
-                                                          40,
+                                                          inter_seq_interval,
                                                           repetitions)
     input_indices = np.array(input_indices)
     input_times = np.array(input_times) * ms
-    sequence_duration = max(seq1['times']) * ms
+    sequence_duration = max(seq1['times'])
     num_channels = int(max(input_indices) + 1)
-    sim_dur = np.max(input_times)
-    test_dur = 1000*ms
+    sim_dur = repetitions*(sequence_duration+inter_seq_interval)*ms
+    test_size = 10
+    test_dur = test_size*(sequence_duration+inter_seq_interval)*ms
     input_spikes = SpikeGeneratorGroup(num_channels,
                                        input_indices,
                                        input_times)
 
     # TODO sizes from 128, 256, 512, 1024, 2048, 4096. Original was 4084
-    Nt = 4096
+    Nt = 128
     Ne, Ni = np.rint(Nt*.85).astype(int), np.rint(Nt*.15).astype(int)
 
-    neu_model = liquid_neu()
+    e_neu_model = liquid_neu()
+    # TODO noise
+    #rand_samples = [uniform(0, 1)
+    #                for _ in range(int((sim_dur/defaultclock.dt)*Nt))]
+    #rand_samples = np.reshape(rand_samples, (int(sim_dur/defaultclock.dt), Nt))
+    #noise = TimedArray(rand_samples*mV, dt=defaultclock.dt)
+    #e_neu_model.modify_model('model', 'alpha*Vm + noise(t, i)', old_expr='alpha*Vm')
     if precision == 'fp64':
-        neu_model.modify_model('model',
+        e_neu_model.modify_model('model',
                                'gtot = gtot0 + gtot1 + gtot2 + gtot3',
                                old_expr='gtot = gtot0')
-        neu_model.model += 'gtot1 : volt\ngtot2 : volt\ngtot3 : volt\n'
-    cells = create_neurons(Ne+Ni, neu_model)
+        e_neu_model.model += 'gtot1 : volt\ngtot2 : volt\ngtot3 : volt\n'
+    cells = create_neurons(Ne+Ni, e_neu_model)
     exc_cells = cells[:Ne]
     inh_cells = cells[Ne:]
 
@@ -98,7 +109,7 @@ def liquid_state_machine(defaultclock, trial_no, path, quiet):
                                  decimal2minifloat(56),
                                  key='weight')
     if precision == 'fp64':
-        e_syn_model.modify_model('parameters', 30*mV, key='weight')
+        e_syn_model.modify_model('parameters', 100*mV, key='weight')
         e_syn_model.modify_model('model', 'gtot1_post', old_expr='gtot0_post')
     thl_conns = create_synapses(input_spikes, cells, e_syn_model)
 
@@ -143,9 +154,10 @@ def liquid_state_machine(defaultclock, trial_no, path, quiet):
                                  old_expr='g += w_plast')
         e_syn_model.modify_model('parameters', 0.02*mV, key='w_plast')
         e_syn_model.modify_model('namespace', 10*mV, key='eta')
-        e_syn_model.modify_model('parameters',
-                                 f'{sequence_duration/ms}*rand()*ms',
-                                 key='delay')
+        # TODO do i need this? I DONT think so
+        #e_syn_model.modify_model('parameters',
+        #                         f'{sequence_duration}*rand()*ms',
+        #                         key='delay')
         e_syn_model.model += 'inc_w_post = w_plast : volt (summed)\n'
         e_syn_model.on_post += 'w_plast = (w_plast/inc_w_post*mV)'
     elif output_mod == 'delay':
@@ -154,7 +166,7 @@ def liquid_state_machine(defaultclock, trial_no, path, quiet):
         e_syn_model.modify_model('on_pre', 'g_syn += weight',
                                  old_expr='g += weight')
         e_syn_model.model += 'delta_t : second\ndelay_proxy : second\n'
-        e_syn_model.on_post += f'delta_t = clip(t - lastspike_pre, 0*ms, {sequence_duration/ms + 1}*ms)\n'
+        e_syn_model.on_post += f'delta_t = clip(t - lastspike_pre, 0*ms, {sequence_duration + 1}*ms)\n'
         e_syn_model.on_post += 'delay_proxy = delay_proxy - 1*(delay_proxy - delta_t)\n'
         e_syn_model.parameters = {**e_syn_model.parameters,
                                   'delay_proxy': '0*ms'}
@@ -231,19 +243,19 @@ def liquid_state_machine(defaultclock, trial_no, path, quiet):
     samples = []
     for lt in labels_times:
         # Not casting like below results in error!
-        ti = np.around(lt/ms - sequence_duration/ms).astype(int)*q.ms
+        ti = np.around(lt/ms - sequence_duration).astype(int)*q.ms
         tf = np.around(lt/ms).astype(int)*q.ms
         temp_data = data.time_slice(ti, tf).to_array()
         samples.append(temp_data.flatten())
 
-    test_size = 10
-    samples_size = len(labels_times)
-    train_size = samples_size-test_size
-    lr = LogisticRegression()
-    lr.fit(samples[:train_size], labels_indices[:train_size])
-    score = lr.score(samples[train_size:], labels_indices[train_size:])
-    print('\n###################')
-    print(f'Accuracy is {score}\n')
+    # TODO not working with more gap
+    #samples_size = len(labels_times)
+    #train_size = samples_size-test_size
+    #lr = LogisticRegression()
+    #lr.fit(samples[:train_size], labels_indices[:train_size])
+    #score = lr.score(samples[train_size:], labels_indices[train_size:])
+    #print('\n###################')
+    #print(f'Accuracy is {score}\n')
 
     temp_trains = spkmon_e.spike_trains()
     spk_trains = [neo.SpikeTrain(temp_trains[x]/ms, t_stop=sim_dur/ms, units='ms')
@@ -267,6 +279,8 @@ def liquid_state_machine(defaultclock, trial_no, path, quiet):
         fig,  (ax0, ax1, ax2) = plt.subplots(3, 1, sharex=True)
         plot_state(sttmon_ro.t, sttmon_ro.Vm[0], var_unit=mV, axes=ax0)
         plot_state(sttmon_ro.t, sttmon_ro.Vm[1], var_unit=mV, axes=ax0)
+        ax0.vlines((sim_dur-test_dur)/ms, 0, 1,
+                   transform=ax0.get_xaxis_transform(), colors='r')
         brian_plot(spkmon_e, axes=ax1)
         ax2.plot(input_times/ms, input_indices, '.')
 
