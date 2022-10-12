@@ -34,6 +34,12 @@ from sklearn.linear_model import LogisticRegression
 def liquid_state_machine(defaultclock, trial_no, path, quiet):
     output_mod = 'stdp'
     precision = 'fp64'
+    # TODO
+    #import random
+    #random.seed(25)
+    #from brian2 import seed
+    #np.random.seed(25)
+    #seed(25)
 
     if precision == 'fp8':
         liquid_neu = fp8LIF
@@ -106,34 +112,42 @@ def liquid_state_machine(defaultclock, trial_no, path, quiet):
     e_syn_model.modify_model('connection', .12, key='p')
     if precision == 'fp8':
         e_syn_model.modify_model('parameters',
-                                 decimal2minifloat(56),
+                                 decimal2minifloat(96),
                                  key='weight')
     if precision == 'fp64':
-        e_syn_model.modify_model('parameters', 100*mV, key='weight')
+        e_syn_model.modify_model('parameters', 80*mV, key='weight')
         e_syn_model.modify_model('model', 'gtot1_post', old_expr='gtot0_post')
     thl_conns = create_synapses(input_spikes, cells, e_syn_model)
 
     e_syn_model = liquid_syn()
     e_syn_model.modify_model('connection', .1, key='p')
     e_syn_model.modify_model('parameters', '20*rand()*ms', key='delay')
-    if precision == 'fp64':
+    if precision == 'fp8':
+        e_syn_model.modify_model('parameters',
+                                 decimal2minifloat(24),
+                                 key='weight')
+    elif precision == 'fp64':
         e_syn_model.modify_model('model', 'gtot2_post', old_expr='gtot0_post')
-        e_syn_model.modify_model('parameters', 8*mV, key='weight')
+        e_syn_model.modify_model('parameters', 20*mV, key='weight')
     intra_exc = create_synapses(exc_cells, cells, e_syn_model)
 
     i_syn_model = liquid_syn()
     i_syn_model.modify_model('connection', .1, key='p')
     if precision == 'fp8':
-        i_syn_model.modify_model('namespace', decimal2minifloat(-1), key='w_factor')
-        i_syn_model.modify_model('parameters', 110, key='weight')
+        i_syn_model.modify_model('namespace',
+                                 decimal2minifloat(-1),
+                                 key='w_factor')
+        i_syn_model.modify_model('parameters',
+                                 decimal2minifloat(120),
+                                 key='weight')
     if precision == 'fp64':
         i_syn_model.modify_model('namespace', -1, key='w_factor')
-        i_syn_model.modify_model('parameters', 170*mV, key='weight')
+        i_syn_model.modify_model('parameters', 100*mV, key='weight')
         i_syn_model.modify_model('model', 'gtot3_post', old_expr='gtot0_post')
     intra_inh = create_synapses(inh_cells, cells, i_syn_model)
 
     e_neu_model = LIF()
-    e_neu_model.modify_model('refractory', '20*ms', old_expr='1*ms')
+    e_neu_model.modify_model('refractory', '20*ms')
     e_neu_model.modify_model('model', 'gtot = gtot0 + gtot1',
                              old_expr='gtot = gtot0')
     e_neu_model.model += 'gtot1 : volt\n'
