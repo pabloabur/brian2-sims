@@ -19,7 +19,7 @@ class LIF(BaseNeuron):
             Iconst : ampere
             '''
         self.threshold = 'Vm > Vthr'
-        self.refractory = '1*ms'
+        self.refractory = '2*ms'
         self.reset = '''
             Vm = Vreset
             '''
