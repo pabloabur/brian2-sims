@@ -49,7 +49,7 @@ def liquid_state_machine(defaultclock, trial_no, path, quiet):
         liquid_syn = CUBA
 
     item_rate = 128
-    repetitions = 100
+    repetitions = 140
     inter_spk_interval = np.ceil(1/item_rate*1000).astype(int)
     inter_seq_interval = 200
     item_spikes = 1
@@ -82,7 +82,7 @@ def liquid_state_machine(defaultclock, trial_no, path, quiet):
     sequence_duration = max(seq1['times'])
     num_channels = int(max(input_indices) + 1)
     sim_dur = repetitions*(sequence_duration+inter_seq_interval)*ms
-    test_size = 10
+    test_size = 50
     test_dur = test_size*(sequence_duration+inter_seq_interval)*ms
     input_spikes = SpikeGeneratorGroup(num_channels,
                                        input_indices,
@@ -146,12 +146,14 @@ def liquid_state_machine(defaultclock, trial_no, path, quiet):
         i_syn_model.modify_model('model', 'gtot3_post', old_expr='gtot0_post')
     intra_inh = create_synapses(inh_cells, cells, i_syn_model)
 
-    e_neu_model = LIF()
+    e_neu_model = LIFIP()
+    e_neu_model.modify_model('namespace', 90000*ms, key='tau_thr')
+    e_neu_model.modify_model('namespace', 0.1*mV, key='thr_inc')
+    e_neu_model.modify_model('parameters', 20*mV, key='Vthr')
     e_neu_model.modify_model('refractory', '20*ms')
     e_neu_model.modify_model('model', 'gtot = gtot0 + gtot1',
                              old_expr='gtot = gtot0')
     e_neu_model.model += 'gtot1 : volt\n'
-    # variable to normalize incoming weights
     e_neu_model.model += 'inc_w : volt\n'
     readout = create_neurons(num_seq, e_neu_model, name='readout')
 
@@ -173,7 +175,8 @@ def liquid_state_machine(defaultclock, trial_no, path, quiet):
         #                         f'{sequence_duration}*rand()*ms',
         #                         key='delay')
         e_syn_model.model += 'inc_w_post = w_plast : volt (summed)\n'
-        e_syn_model.on_post += 'w_plast = (w_plast/inc_w_post*mV)'
+        norm_factor = 1
+        e_syn_model.on_post += 'w_plast = int(norm_factor==1)*(w_plast/inc_w_post*mV) + int(norm_factor==0)*w_plast'
     elif output_mod == 'delay':
         e_syn_model = CUBA()
 
@@ -232,7 +235,7 @@ def liquid_state_machine(defaultclock, trial_no, path, quiet):
                             record=selected_exc_cells)
     sttmon_i = StateMonitor(inh_cells, variables='Vm',
                             record=selected_inh_cells)
-    sttmon_ro = StateMonitor(readout, variables='Vm',
+    sttmon_ro = StateMonitor(readout, variables=['Vm', 'Vthr'],
                              record=[0, 1])
 
     kernel = kernels.GaussianKernel(sigma=30*q.ms)
@@ -245,6 +248,9 @@ def liquid_state_machine(defaultclock, trial_no, path, quiet):
     # works. 60 for small net
     # e_syn_model.modify_model('parameters', 60, key='weight')
     label_readout.namespace['w_factor'] = 0
+    exc_readout.namespace['eta'] = 0*mV
+    norm_factor = 0
+    exc_readout.w_plast = '145*(w_plast/inc_w_post*mV)'
     run(test_dur)
     device.build()
 
@@ -290,9 +296,12 @@ def liquid_state_machine(defaultclock, trial_no, path, quiet):
              rates=np.array(pop_avg_rates))
 
     if not quiet:
-        fig,  (ax0, ax1, ax2) = plt.subplots(3, 1, sharex=True)
+        fig,  (ax0, ax1, ax2, ax3) = plt.subplots(4, 1, sharex=True)
         plot_state(sttmon_ro.t, sttmon_ro.Vm[0], var_unit=mV, axes=ax0)
         plot_state(sttmon_ro.t, sttmon_ro.Vm[1], var_unit=mV, axes=ax0)
+        plot_state(sttmon_ro.t, sttmon_ro.Vthr[0], var_unit=mV, axes=ax0)
+        plot_state(sttmon_ro.t, sttmon_ro.Vthr[1], var_unit=mV, axes=ax0)
+        brian_plot(spkmon_ro, axes=ax3)
         ax0.vlines((sim_dur-test_dur)/ms, 0, 1,
                    transform=ax0.get_xaxis_transform(), colors='r')
         brian_plot(spkmon_e, axes=ax1)
@@ -326,4 +335,21 @@ def liquid_state_machine(defaultclock, trial_no, path, quiet):
         plt.ylabel('count')
         plt.xlabel('CV')
 
+        # TODO better organize somewhere else
+        output_spikes = []
+        for spk in spkmon_ro.spike_trains().values():
+            output_spikes.append(
+                neo.SpikeTrain(
+                    spk,
+                    units='ms',
+                    t_stop=np.around(sim_dur/defaultclock.dt).astype(int)))
+        import feather
+        import pandas as pd
+        output_spikes = pd.DataFrame(
+            {'time': np.array(spkmon_ro.t/defaultclock.dt),
+             'id': np.array(spkmon_ro.i)})
+        feather.write_dataframe(output_spikes, 'output_spikes.feather')
+        events = np.array([[ev[0], ev[1]/defaultclock.dt, ev[2]/defaultclock.dt] for ev in events])
+        events = pd.DataFrame(events, columns=['label', 't_start', 't_stop'])
+        feather.write_dataframe(events, 'input_spikes.feather')
         plt.show()
