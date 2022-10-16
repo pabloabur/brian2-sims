@@ -65,6 +65,16 @@ def create_testbench(sequences, occurences, inter_seq_dt, num_seq):
         Time gap between sequences, in ms
     num_seq : int
         Total number of sequences
+
+    Returns
+    -------
+    testbench_indices : list of int
+        Each element is a channel
+    testbench_times : list of int
+        Contains instant of an event, in ms
+    events : list of lists
+        Each nested list contains label, start time, and stop time. Units
+        of time are in ms and labels are int.
     """
     testbench_indices = []
     testbench_times = []

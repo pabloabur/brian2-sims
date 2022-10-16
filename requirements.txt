@@ -1,11 +1,12 @@
 bokeh==2.4.3
 Brian2==2.5.1
--e git+ssh://git@github.com/pabloabur/brian2-sims.git@a7bc7ce513199fb04d5aaea5288752f2a28e7308#egg=brian2_sims
+-e git+ssh://git@github.com/pabloabur/brian2-sims.git@9d73b08e511837794fc86c750c72dbef0574353e#egg=brian2_sims
 brian2tools==0.3
 cycler==0.11.0
 Cython==0.29.32
 elephant==0.11.1
 fancycompleter==0.9.1
+feather-format==0.4.1
 fonttools==4.37.1
 gitdb==4.0.9
 GitPython==3.1.27
@@ -25,6 +26,7 @@ packaging==21.3
 pandas==1.4.3
 pdbpp==0.10.3
 Pillow==9.2.0
+pyarrow==9.0.0
 Pygments==2.13.0
 PyLEMS==0.5.9
 pyparsing==3.0.9
