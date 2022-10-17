@@ -17,7 +17,7 @@ from core.utils.testbench import create_item, create_sequence, create_testbench
 import numpy as np
 import matplotlib.pyplot as plt
 import json
-from random import uniform
+from random import uniform, sample
 
 import neo
 import quantities as q
@@ -91,6 +91,8 @@ def liquid_state_machine(defaultclock, trial_no, path, quiet):
     # TODO sizes from 128, 256, 512, 1024, 2048, 4096. Original was 4084
     Nt = 128
     Ne, Ni = np.rint(Nt*.85).astype(int), np.rint(Nt*.15).astype(int)
+    # In case rounding makes a difference
+    Nt = Ne + Ni
 
     e_neu_model = liquid_neu()
     # TODO noise
@@ -99,12 +101,22 @@ def liquid_state_machine(defaultclock, trial_no, path, quiet):
     #rand_samples = np.reshape(rand_samples, (int(sim_dur/defaultclock.dt), Nt))
     #noise = TimedArray(rand_samples*mV, dt=defaultclock.dt)
     #e_neu_model.modify_model('model', 'alpha*Vm + noise(t, i)', old_expr='alpha*Vm')
+    e_neu_model.model += 'x : integer (constant)\ny : integer (constant)\nz : integer (constant)\n'
     if precision == 'fp64':
         e_neu_model.modify_model('model',
                                'gtot = gtot0 + gtot1 + gtot2 + gtot3',
                                old_expr='gtot = gtot0')
         e_neu_model.model += 'gtot1 : volt\ngtot2 : volt\ngtot3 : volt\n'
-    cells = create_neurons(Ne+Ni, e_neu_model)
+    cells = create_neurons(Nt, e_neu_model)
+
+    # Random placement in a grid
+    net_grid = np.reshape(sample(range(Nt), k=Nt), (4, 2, 16))
+    for neu_id in np.nditer(net_grid):
+        positions = np.where(net_grid==int(neu_id))
+        cells[int(neu_id)].x = str(positions[0][0])
+        cells[int(neu_id)].y = str(positions[1][0])
+        cells[int(neu_id)].z = str(positions[2][0])
+
     exc_cells = cells[:Ne]
     inh_cells = cells[Ne:]
 
