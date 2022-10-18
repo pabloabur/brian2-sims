@@ -132,7 +132,11 @@ def liquid_state_machine(defaultclock, trial_no, path, quiet):
     thl_conns = create_synapses(input_spikes, cells, e_syn_model)
 
     e_syn_model = liquid_syn()
-    e_syn_model.modify_model('connection', .1, key='p')
+    # TODO conditional on position. it was just .1 before
+    e_syn_model.modify_model(
+        'connection',
+        '.1 * exp(-((x_pre-x_post)**2 + (y_pre-y_post)**2 + (z_pre-z_post)**2) / 2**2)',
+        key='p')
     e_syn_model.modify_model('parameters', '20*rand()*ms', key='delay')
     if precision == 'fp8':
         e_syn_model.modify_model('parameters',
@@ -145,6 +149,11 @@ def liquid_state_machine(defaultclock, trial_no, path, quiet):
 
     i_syn_model = liquid_syn()
     i_syn_model.modify_model('connection', .1, key='p')
+    # TODO conditional on position
+    i_syn_model.modify_model(
+        'connection',
+        '.1 * exp(-((x_pre-x_post)**2 + (y_pre-y_post)**2 + (z_pre-z_post)**2) / 2**2)',
+        key='p')
     if precision == 'fp8':
         i_syn_model.modify_model('namespace',
                                  decimal2minifloat(-1),
@@ -158,6 +167,7 @@ def liquid_state_machine(defaultclock, trial_no, path, quiet):
         i_syn_model.modify_model('model', 'gtot3_post', old_expr='gtot0_post')
     intra_inh = create_synapses(inh_cells, cells, i_syn_model)
 
+    # Definition of readouts
     e_neu_model = LIFIP()
     e_neu_model.modify_model('namespace', 90000*ms, key='tau_thr')
     e_neu_model.modify_model('namespace', 0.1*mV, key='thr_inc')
