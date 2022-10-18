@@ -374,4 +374,14 @@ def liquid_state_machine(defaultclock, trial_no, path, quiet):
         events = np.array([[ev[0], ev[1]/defaultclock.dt, ev[2]/defaultclock.dt] for ev in events])
         events = pd.DataFrame(events, columns=['label', 't_start', 't_stop'])
         feather.write_dataframe(events, 'input_spikes.feather')
+
+        links = pd.DataFrame(
+            {'i': np.append(intra_exc.i, intra_inh.i),
+             'j': np.append(intra_exc.j, intra_inh.j)})
+        feather.write_dataframe(links, 'links.feather')
+        nodes = pd.DataFrame(
+            {'neu_id': [x for x in range(Nt)],
+             'type': ['exc' for _ in range(Ne)] + ['inh' for _ in range(Ne, Nt)]})
+        feather.write_dataframe(nodes, 'nodes.feather')
+
         plt.show()
