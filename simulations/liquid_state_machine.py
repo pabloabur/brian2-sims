@@ -110,7 +110,7 @@ def liquid_state_machine(defaultclock, trial_no, path, quiet):
     cells = create_neurons(Nt, e_neu_model)
 
     # Random placement in a grid
-    net_grid = np.reshape(sample(range(Nt), k=Nt), (4, 2, 16))
+    net_grid = np.reshape(sample(range(Nt), k=Nt), (int(Nt/32), 2, 16))
     for neu_id in np.nditer(net_grid):
         positions = np.where(net_grid==int(neu_id))
         cells[int(neu_id)].x = str(positions[0][0])
@@ -132,10 +132,9 @@ def liquid_state_machine(defaultclock, trial_no, path, quiet):
     thl_conns = create_synapses(input_spikes, cells, e_syn_model)
 
     e_syn_model = liquid_syn()
-    # TODO conditional on position. it was just .1 before
     e_syn_model.modify_model(
         'connection',
-        '.1 * exp(-((x_pre-x_post)**2 + (y_pre-y_post)**2 + (z_pre-z_post)**2) / 2**2)',
+        '.3 * exp(-((x_pre-x_post)**2 + (y_pre-y_post)**2 + (z_pre-z_post)**2) / 2**2)',
         key='p')
     e_syn_model.modify_model('parameters', '20*rand()*ms', key='delay')
     if precision == 'fp8':
@@ -145,11 +144,15 @@ def liquid_state_machine(defaultclock, trial_no, path, quiet):
     elif precision == 'fp64':
         e_syn_model.modify_model('model', 'gtot2_post', old_expr='gtot0_post')
         e_syn_model.modify_model('parameters', 20*mV, key='weight')
-    intra_exc = create_synapses(exc_cells, cells, e_syn_model)
+    exc_exc = create_synapses(exc_cells, exc_cells, e_syn_model)
+
+    e_syn_model.modify_model(
+        'connection',
+        '.2 * exp(-((x_pre-x_post)**2 + (y_pre-y_post)**2 + (z_pre-z_post)**2) / 2**2)',
+        key='p')
+    exc_inh = create_synapses(exc_cells, inh_cells, e_syn_model)
 
     i_syn_model = liquid_syn()
-    i_syn_model.modify_model('connection', .1, key='p')
-    # TODO conditional on position
     i_syn_model.modify_model(
         'connection',
         '.1 * exp(-((x_pre-x_post)**2 + (y_pre-y_post)**2 + (z_pre-z_post)**2) / 2**2)',
@@ -165,7 +168,13 @@ def liquid_state_machine(defaultclock, trial_no, path, quiet):
         i_syn_model.modify_model('namespace', -1, key='w_factor')
         i_syn_model.modify_model('parameters', 100*mV, key='weight')
         i_syn_model.modify_model('model', 'gtot3_post', old_expr='gtot0_post')
-    intra_inh = create_synapses(inh_cells, cells, i_syn_model)
+    inh_inh = create_synapses(inh_cells, inh_cells, i_syn_model)
+
+    i_syn_model.modify_model(
+        'connection',
+        '.4 * exp(-((x_pre-x_post)**2 + (y_pre-y_post)**2 + (z_pre-z_post)**2) / 2**2)',
+        key='p')
+    inh_exc = create_synapses(inh_cells, exc_cells, i_syn_model)
 
     # Definition of readouts
     e_neu_model = LIFIP()
@@ -376,8 +385,9 @@ def liquid_state_machine(defaultclock, trial_no, path, quiet):
         feather.write_dataframe(events, 'input_spikes.feather')
 
         links = pd.DataFrame(
-            {'i': np.append(intra_exc.i, intra_inh.i),
-             'j': np.append(intra_exc.j, intra_inh.j)})
+            {'i': np.concatenate((exc_exc.i, exc_inh.i, inh_inh.i+Ne, inh_exc.i+Ne)),
+             'j': np.concatenate((exc_exc.j, exc_inh.j+Ne, inh_inh.j+Ne, inh_exc.j))
+             })
         feather.write_dataframe(links, 'links.feather')
         nodes = pd.DataFrame(
             {'neu_id': [x for x in range(Nt)],
