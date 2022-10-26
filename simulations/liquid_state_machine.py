@@ -32,7 +32,6 @@ from sklearn.linear_model import LogisticRegression
 
 
 def liquid_state_machine(defaultclock, trial_no, path, quiet):
-    output_mod = 'stdp'
     precision = 'fp64'
     # TODO
     #import random
@@ -199,43 +198,31 @@ def liquid_state_machine(defaultclock, trial_no, path, quiet):
         labels_times.append(ev[2])
     labels = SpikeGeneratorGroup(num_seq, labels_indices, labels_times)
 
-    if output_mod == 'stdp':
-        # TODO organize somewhere else
-        from core.equations.synapses.hSTDP import hSTDP
-        e_syn_model = hSTDP()
-        e_syn_model.modify_model('on_pre', 'g_syn += w_plast',
-                                 old_expr='g += w_plast')
-        e_syn_model.modify_model('parameters', 0.02*mV, key='w_plast')
+    # TODO organize somewhere else
+    from core.equations.synapses.hSTDP import hSTDP
+    e_syn_model = hSTDP()
+    e_syn_model.modify_model('on_pre', 'g_syn += w_plast',
+                             old_expr='g += w_plast')
+    e_syn_model.modify_model('parameters', 0.02*mV, key='w_plast')
 
-        e_syn_model.modify_model('namespace', 100*mV, key='w_lim')
-        e_syn_model.modify_model('model', '',
-            old_expr='outgoing_weights_pre = w_plast : volt (summed)')
-        e_syn_model.modify_model('model', '',
-            old_expr='outgoing_factor = outgoing_weights_pre - w_lim : volt')
-        e_syn_model.modify_model('model', '',
-            old_expr='+ int(outgoing_factor > 0*volt)*outgoing_factor ')
-        # TODO init? e_syn_model.parameters['w_plast'] = hSTDP_model.namespace['w_max']/num_neurons/10
+    e_syn_model.modify_model('namespace', 100*mV, key='w_lim')
+    e_syn_model.modify_model('model', '',
+        old_expr='outgoing_weights_pre = w_plast : volt (summed)')
+    e_syn_model.modify_model('model', '',
+        old_expr='outgoing_factor = outgoing_weights_pre - w_lim : volt')
+    e_syn_model.modify_model('model', '',
+        old_expr='+ int(outgoing_factor > 0*volt)*outgoing_factor ')
+    # TODO init? e_syn_model.parameters['w_plast'] = hSTDP_model.namespace['w_max']/num_neurons/10
 
-        e_syn_model.modify_model('namespace', 20*mV, key='eta')
-        # TODO do i need this? I DONT think so
-        #e_syn_model.modify_model('parameters',
-        #                         f'{sequence_duration}*rand()*ms',
-        #                         key='delay')
-        e_syn_model.model += 'inc_w_post = w_plast : volt (summed)\n'
-        norm_factor = 1
-        # TODO not needed if using heterosyn.
-        #e_syn_model.on_post += 'w_plast = int(norm_factor==1)*(w_plast/inc_w_post*mV) + int(norm_factor==0)*w_plast'
-    elif output_mod == 'delay':
-        e_syn_model = CUBA()
-
-        e_syn_model.modify_model('on_pre', 'g_syn += weight',
-                                 old_expr='g += weight')
-        e_syn_model.model += 'delta_t : second\ndelay_proxy : second\n'
-        e_syn_model.on_post += f'delta_t = clip(t - lastspike_pre, 0*ms, {sequence_duration + 1}*ms)\n'
-        e_syn_model.on_post += 'delay_proxy = delay_proxy - 1*(delay_proxy - delta_t)\n'
-        e_syn_model.parameters = {**e_syn_model.parameters,
-                                  'delay_proxy': '0*ms'}
-        e_syn_model.modify_model('parameters', 0.02*mV, key='weight')
+    e_syn_model.modify_model('namespace', 20*mV, key='eta')
+    # TODO do i need this? I DONT think so
+    #e_syn_model.modify_model('parameters',
+    #                         f'{sequence_duration}*rand()*ms',
+    #                         key='delay')
+    e_syn_model.model += 'inc_w_post = w_plast : volt (summed)\n'
+    norm_factor = 1
+    # TODO not needed if using heterosyn.
+    #e_syn_model.on_post += 'w_plast = int(norm_factor==1)*(w_plast/inc_w_post*mV) + int(norm_factor==0)*w_plast'
     e_syn_model.modify_model('model', 'dg_syn/dt = alpha_syn*g_syn',
                              old_expr='dg/dt = alpha_syn*g')
     e_syn_model.modify_model('model', 'g_syn*w_factor',
@@ -292,9 +279,6 @@ def liquid_state_machine(defaultclock, trial_no, path, quiet):
     kernel = kernels.GaussianKernel(sigma=30*q.ms)
     run(sim_dur-test_dur)
 
-    if output_mod == 'delay':
-        exc_readout.delay = 'delay_proxy'
-        exc_readout.weight['delta_t==129*ms'] = 0*mV
     # TODO small weights e.g. 10 get stuck, high explodes e.g. 56. 1 kindda
     # works. 60 for small net
     # e_syn_model.modify_model('parameters', 60, key='weight')
