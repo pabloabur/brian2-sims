@@ -127,7 +127,8 @@ def liquid_state_machine(defaultclock, trial_no, path, quiet):
                                  decimal2minifloat(96),
                                  key='weight')
     if precision == 'fp64':
-        e_syn_model.modify_model('parameters', 80*mV, key='weight')
+        # TODO proportional increase in fp8 as well (it was 80 here)
+        e_syn_model.modify_model('parameters', 90*mV, key='weight')
         e_syn_model.modify_model('model', 'gtot1_post', old_expr='gtot0_post')
     thl_conns = create_synapses(input_spikes, cells, e_syn_model)
 
@@ -143,7 +144,8 @@ def liquid_state_machine(defaultclock, trial_no, path, quiet):
                                  key='weight')
     elif precision == 'fp64':
         e_syn_model.modify_model('model', 'gtot2_post', old_expr='gtot0_post')
-        e_syn_model.modify_model('parameters', 20*mV, key='weight')
+        # TODO proportional increase in fp8 as well (it was 20 here)
+        e_syn_model.modify_model('parameters', 35*mV, key='weight')
     exc_exc = create_synapses(exc_cells, exc_cells, e_syn_model)
 
     e_syn_model.modify_model(
@@ -185,7 +187,9 @@ def liquid_state_machine(defaultclock, trial_no, path, quiet):
     e_neu_model.modify_model('model', 'gtot = gtot0 + gtot1',
                              old_expr='gtot = gtot0')
     e_neu_model.model += 'gtot1 : volt\n'
+    # TODO remove unused if hSTDP is used instead of normalization
     e_neu_model.model += 'inc_w : volt\n'
+    e_neu_model.model += 'incoming_weights : volt\n'
     readout = create_neurons(num_seq, e_neu_model, name='readout')
 
     labels_indices = []
@@ -196,18 +200,31 @@ def liquid_state_machine(defaultclock, trial_no, path, quiet):
     labels = SpikeGeneratorGroup(num_seq, labels_indices, labels_times)
 
     if output_mod == 'stdp':
-        e_syn_model = STDP()
+        # TODO organize somewhere else
+        from core.equations.synapses.hSTDP import hSTDP
+        e_syn_model = hSTDP()
         e_syn_model.modify_model('on_pre', 'g_syn += w_plast',
                                  old_expr='g += w_plast')
         e_syn_model.modify_model('parameters', 0.02*mV, key='w_plast')
-        e_syn_model.modify_model('namespace', 10*mV, key='eta')
+
+        e_syn_model.modify_model('namespace', 100*mV, key='w_lim')
+        e_syn_model.modify_model('model', '',
+            old_expr='outgoing_weights_pre = w_plast : volt (summed)')
+        e_syn_model.modify_model('model', '',
+            old_expr='outgoing_factor = outgoing_weights_pre - w_lim : volt')
+        e_syn_model.modify_model('model', '',
+            old_expr='+ int(outgoing_factor > 0*volt)*outgoing_factor ')
+        # TODO init? e_syn_model.parameters['w_plast'] = hSTDP_model.namespace['w_max']/num_neurons/10
+
+        e_syn_model.modify_model('namespace', 20*mV, key='eta')
         # TODO do i need this? I DONT think so
         #e_syn_model.modify_model('parameters',
         #                         f'{sequence_duration}*rand()*ms',
         #                         key='delay')
         e_syn_model.model += 'inc_w_post = w_plast : volt (summed)\n'
         norm_factor = 1
-        e_syn_model.on_post += 'w_plast = int(norm_factor==1)*(w_plast/inc_w_post*mV) + int(norm_factor==0)*w_plast'
+        # TODO not needed if using heterosyn.
+        #e_syn_model.on_post += 'w_plast = int(norm_factor==1)*(w_plast/inc_w_post*mV) + int(norm_factor==0)*w_plast'
     elif output_mod == 'delay':
         e_syn_model = CUBA()
 
@@ -234,6 +251,9 @@ def liquid_state_machine(defaultclock, trial_no, path, quiet):
     del e_syn_model.parameters['alpha_syn']
     exc_readout = create_synapses(exc_cells, readout, e_syn_model,
                                   name='exc_readout')
+    # TODO only if hSTDP is used
+    exc_readout.run_regularly('w_plast = clip(w_plast - h_eta*heterosyn_factor, 0*volt, w_max)',
+                               dt=1*ms)
 
     e_syn_model = CUBA()
     e_syn_model.modify_model('model', 'dg_syn/dt = alpha_syn*g_syn',
@@ -281,7 +301,7 @@ def liquid_state_machine(defaultclock, trial_no, path, quiet):
     label_readout.namespace['w_factor'] = 0
     exc_readout.namespace['eta'] = 0*mV
     norm_factor = 0
-    exc_readout.w_plast = '145*(w_plast/inc_w_post*mV)'
+    #exc_readout.w_plast = '145*(w_plast/inc_w_post*mV)'
     run(test_dur)
     device.build()
 
@@ -367,31 +387,47 @@ def liquid_state_machine(defaultclock, trial_no, path, quiet):
         plt.xlabel('CV')
 
         # TODO better organize somewhere else
-        output_spikes = []
-        for spk in spkmon_ro.spike_trains().values():
-            output_spikes.append(
-                neo.SpikeTrain(
-                    spk,
-                    units='ms',
-                    t_stop=np.around(sim_dur/defaultclock.dt).astype(int)))
         import feather
         import pandas as pd
         output_spikes = pd.DataFrame(
-            {'time': np.array(spkmon_ro.t/defaultclock.dt),
+            {'time_ms': np.array(spkmon_ro.t/defaultclock.dt),
              'id': np.array(spkmon_ro.i)})
-        feather.write_dataframe(output_spikes, 'output_spikes.feather')
+        feather.write_dataframe(output_spikes, f'{path}/output_spikes.feather')
+
+        temp_time, temp_Vm, temp_Vthr, temp_id = [], [], [], []
+        for idx in range(readout.N):
+            temp_time.extend(sttmon_ro.t/defaultclock.dt)
+            temp_Vm.extend(sttmon_ro.Vm[idx]/mV)
+            temp_Vthr.extend(sttmon_ro.Vthr[idx]/mV)
+            temp_id.extend([idx for _ in range(len(sttmon_ro.Vm[idx]))])
+        output_traces = pd.DataFrame({'time_ms': temp_time,
+                                      'Vm_mV': temp_Vm,
+                                      'Vthr_mV': temp_Vthr,
+                                      'id': temp_id})
+        feather.write_dataframe(output_traces, f'{path}/output_traces.feather')
+
+        input_spikes = pd.DataFrame(
+            {'time_ms': input_times/defaultclock.dt,
+             'id': input_indices})
+        feather.write_dataframe(input_spikes, f'{path}/input_spikes.feather')
+
+        rec_spikes = pd.DataFrame(
+            {'time_ms': np.array(spkmon_e.t/defaultclock.dt),
+             'id': np.array(spkmon_e.i)})
+        feather.write_dataframe(rec_spikes, f'{path}/rec_spikes.feather')
+
         events = np.array([[ev[0], ev[1]/defaultclock.dt, ev[2]/defaultclock.dt] for ev in events])
-        events = pd.DataFrame(events, columns=['label', 't_start', 't_stop'])
-        feather.write_dataframe(events, 'input_spikes.feather')
+        events = pd.DataFrame(events, columns=['label', 'tstart_ms', 'tstop_ms'])
+        feather.write_dataframe(events, f'{path}/events_spikes.feather')
 
         links = pd.DataFrame(
             {'i': np.concatenate((exc_exc.i, exc_inh.i, inh_inh.i+Ne, inh_exc.i+Ne)),
              'j': np.concatenate((exc_exc.j, exc_inh.j+Ne, inh_inh.j+Ne, inh_exc.j))
              })
-        feather.write_dataframe(links, 'links.feather')
+        feather.write_dataframe(links, f'{path}/links.feather')
         nodes = pd.DataFrame(
             {'neu_id': [x for x in range(Nt)],
              'type': ['exc' for _ in range(Ne)] + ['inh' for _ in range(Ne, Nt)]})
-        feather.write_dataframe(nodes, 'nodes.feather')
+        feather.write_dataframe(nodes, f'{path}/nodes.feather')
 
         plt.show()
