@@ -45,13 +45,15 @@ class BaseEquation:
         Notes
         -----
         The model itself is a class with attributes that can be str or dict. In
-        the latter case, using the parameter key is necessary.
+        the latter case, using the parameter key is necessary. Using strings for
+        values in dictionary namespace will raise an error, so use explicit
+        values instead.
 
         Examples
         --------
         >>> model.modify_model('threshold', 'Vm >= 10')
         >>> model.modify_model('threshold', ' < ', old_expr=' >= ')
-        >>> model.modify_model('namespace', '0', old_expr='127', key='Vthr')
+        >>> model.modify_model('namespace', 0, old_expr=127, key='Vthr')
         """
         desc = getattr(self, attr)
         if isinstance(desc, str):
