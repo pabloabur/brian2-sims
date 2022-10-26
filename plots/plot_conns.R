@@ -2,8 +2,8 @@ library(arrow)
 library(visNetwork)
 library(igraph)
 
-links <- arrow::read_feather('~/git/brian2-sims/links.feather')
-nodes <- arrow::read_feather('~/git/brian2-sims/nodes.feather')
+links <- arrow::read_feather('links.feather')
+nodes <- arrow::read_feather('nodes.feather')
 network <- graph_from_data_frame(d=links, vertices = nodes)
 
 types <- c('red', 'blue')
