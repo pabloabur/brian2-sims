@@ -8,16 +8,22 @@ from core.utils.misc import decimal2minifloat
 from core.equations.neurons.fp8LIF import fp8LIF
 from core.equations.synapses.fp8CUBA import fp8CUBA
 from core.equations.neurons.LIF import LIF
+from core.equations.synapses.hSTDP import hSTDP
 from core.equations.neurons.LIFIP import LIFIP
 from core.equations.synapses.CUBA import CUBA
 from core.equations.synapses.STDP import STDP
 from core.builder.groups_builder import create_synapses, create_neurons
 from core.utils.testbench import create_item, create_sequence, create_testbench
 
+import pandas as pd
+import math
 import numpy as np
 import matplotlib.pyplot as plt
 import json
 from random import uniform, sample
+import git
+import sys
+sys.path.extend([git.Repo('.').git.rev_parse('--show-toplevel')])
 
 import neo
 import quantities as q
@@ -27,13 +33,14 @@ from elephant.conversion import BinnedSpikeTrain
 
 from viziphant.statistics import plot_instantaneous_rates_colormesh
 from brian2tools import brian_plot, plot_state
+import feather
 
-from sklearn.linear_model import LogisticRegression
+from sklearn.svm import LinearSVC
 
 
 def liquid_state_machine(defaultclock, trial_no, path, quiet):
     precision = 'fp64'
-    # TODO
+    # freezing noise
     #import random
     #random.seed(25)
     #from brian2 import seed
@@ -65,36 +72,49 @@ def liquid_state_machine(defaultclock, trial_no, path, quiet):
     seq2 = [H, G, F, E, D, C, B, A]
     seq1 = create_sequence(seq1, inter_spk_interval)
     seq2 = create_sequence(seq2, inter_spk_interval)
+    sequences = [seq1, seq2]
 
-    channels_per_item = 1
-    num_items = 8
-    num_seq = 2
-    print(f'Simulation with {num_seq} sequences, each having {num_items} '
-          f'items represented by {channels_per_item} input channels')
+    num_labels = 2
+    labels = [x for x in range(num_labels)]
+    probs = [.5, .5]
 
-    input_indices, input_times, events = create_testbench([seq1, seq2],
-                                                          [.5, .5],
+    # this for mus silicium
+    #mus_silic = pd.read_csv(
+    #    'spikes.csv', names=['speaker', 'digit']+[f'ch{i}' for i in range(40)])
+    #labels = mus_silic.loc[:, 'digit'].values.tolist()
+    #num_labels = len(np.unique(labels))
+    #mus_silic = mus_silic.loc[:, ~mus_silic.columns.isin(['speaker', 'digit'])].values.tolist()
+    #sequences = []
+    #for spk_t in mus_silic:
+    #    seq_i = [x for x in range(len(spk_t)) if not math.isnan(spk_t[x])]
+    #    seq_t = np.array([x for x in spk_t if str(x) != 'nan']) - np.nanmin(spk_t)
+    #    sequences.append({'times': seq_t, 'indices': seq_i})
+    #probs = None
+    #repetitions = len(sequences)
+
+    input_indices, input_times, events = create_testbench(sequences,
+                                                          labels,
+                                                          probs,
                                                           inter_seq_interval,
                                                           repetitions)
     input_indices = np.array(input_indices)
     input_times = np.array(input_times) * ms
-    sequence_duration = max(seq1['times'])
     num_channels = int(max(input_indices) + 1)
-    sim_dur = repetitions*(sequence_duration+inter_seq_interval)*ms
+    sim_dur = events[-1][2] + inter_seq_interval*ms
     test_size = 50
-    test_dur = test_size*(sequence_duration+inter_seq_interval)*ms
+    test_t = events[-test_size][2] + inter_seq_interval*ms
     input_spikes = SpikeGeneratorGroup(num_channels,
                                        input_indices,
                                        input_times)
 
-    # TODO sizes from 128, 256, 512, 1024, 2048, 4096. Original was 4084
+    # sizes from 128, 256, 512, 1024, 2048, 4096. Original was 4084
     Nt = 128
     Ne, Ni = np.rint(Nt*.85).astype(int), np.rint(Nt*.15).astype(int)
     # In case rounding makes a difference
     Nt = Ne + Ni
 
     e_neu_model = liquid_neu()
-    # TODO noise
+    # noise
     #rand_samples = [uniform(0, 1)
     #                for _ in range(int((sim_dur/defaultclock.dt)*Nt))]
     #rand_samples = np.reshape(rand_samples, (int(sim_dur/defaultclock.dt), Nt))
@@ -126,8 +146,7 @@ def liquid_state_machine(defaultclock, trial_no, path, quiet):
                                  decimal2minifloat(96),
                                  key='weight')
     if precision == 'fp64':
-        # TODO proportional increase in fp8 as well (it was 80 here)
-        e_syn_model.modify_model('parameters', 90*mV, key='weight')
+        e_syn_model.modify_model('parameters', 80*mV, key='weight')
         e_syn_model.modify_model('model', 'gtot1_post', old_expr='gtot0_post')
     thl_conns = create_synapses(input_spikes, cells, e_syn_model)
 
@@ -143,8 +162,7 @@ def liquid_state_machine(defaultclock, trial_no, path, quiet):
                                  key='weight')
     elif precision == 'fp64':
         e_syn_model.modify_model('model', 'gtot2_post', old_expr='gtot0_post')
-        # TODO proportional increase in fp8 as well (it was 20 here)
-        e_syn_model.modify_model('parameters', 35*mV, key='weight')
+        e_syn_model.modify_model('parameters', 20*mV, key='weight')
     exc_exc = create_synapses(exc_cells, exc_cells, e_syn_model)
 
     e_syn_model.modify_model(
@@ -189,22 +207,27 @@ def liquid_state_machine(defaultclock, trial_no, path, quiet):
     # TODO remove unused if hSTDP is used instead of normalization
     e_neu_model.model += 'inc_w : volt\n'
     e_neu_model.model += 'incoming_weights : volt\n'
-    readout = create_neurons(num_seq, e_neu_model, name='readout')
+    readout = create_neurons(num_labels, e_neu_model, name='readout')
 
-    labels_indices = []
-    labels_times = []
-    for ev in events:
-        labels_indices.append(ev[0])
-        labels_times.append(ev[2])
-    labels = SpikeGeneratorGroup(num_seq, labels_indices, labels_times)
+    teach_signal = SpikeGeneratorGroup(num_labels,
+                                       [x[0] for x in events],
+                                       [x[2] for x in events])
 
-    # TODO organize somewhere else
-    from core.equations.synapses.hSTDP import hSTDP
     e_syn_model = hSTDP()
     e_syn_model.modify_model('on_pre', 'g_syn += w_plast',
                              old_expr='g += w_plast')
     e_syn_model.modify_model('parameters', 0.02*mV, key='w_plast')
 
+    # to test weight decay
+    #asdf = 0.995
+    #e_syn_model.modify_model('model', 
+    #    'dw_plast/dt = asdf*w_plast/second : volt (clock-driven)',
+    #    old_expr= 'w_plast : volt')
+    #e_syn_model.modify_model('on_pre',
+    #    '',
+    #    old_expr= 'w_plast = clip(w_plast - eta*j_trace, 0*volt, w_max)')
+
+    # only if hSTDP is used
     e_syn_model.modify_model('namespace', 100*mV, key='w_lim')
     e_syn_model.modify_model('model', '',
         old_expr='outgoing_weights_pre = w_plast : volt (summed)')
@@ -212,16 +235,16 @@ def liquid_state_machine(defaultclock, trial_no, path, quiet):
         old_expr='outgoing_factor = outgoing_weights_pre - w_lim : volt')
     e_syn_model.modify_model('model', '',
         old_expr='+ int(outgoing_factor > 0*volt)*outgoing_factor ')
-    # TODO init? e_syn_model.parameters['w_plast'] = hSTDP_model.namespace['w_max']/num_neurons/10
 
-    e_syn_model.modify_model('namespace', 20*mV, key='eta')
+    # TODO learning rate should be paired with normalization or hSTDP
+    e_syn_model.modify_model('namespace', 1*mV, key='eta')
     # TODO do i need this? I DONT think so
     #e_syn_model.modify_model('parameters',
     #                         f'{sequence_duration}*rand()*ms',
     #                         key='delay')
     e_syn_model.model += 'inc_w_post = w_plast : volt (summed)\n'
     norm_factor = 1
-    # TODO not needed if using heterosyn.
+    # not needed if using hSTDP
     #e_syn_model.on_post += 'w_plast = int(norm_factor==1)*(w_plast/inc_w_post*mV) + int(norm_factor==0)*w_plast'
     e_syn_model.modify_model('model', 'dg_syn/dt = alpha_syn*g_syn',
                              old_expr='dg/dt = alpha_syn*g')
@@ -236,9 +259,10 @@ def liquid_state_machine(defaultclock, trial_no, path, quiet):
     e_syn_model.parameters = {**e_syn_model.parameters,
                               **{'alpha_syn_syn': 'tau_syn_syn/(dt + tau_syn_syn)'}}
     del e_syn_model.parameters['alpha_syn']
+    e_syn_model.modify_model('connection', .1, key='p')
     exc_readout = create_synapses(exc_cells, readout, e_syn_model,
                                   name='exc_readout')
-    # TODO only if hSTDP is used
+    # only if hSTDP is used
     exc_readout.run_regularly('w_plast = clip(w_plast - h_eta*heterosyn_factor, 0*volt, w_max)',
                                dt=1*ms)
 
@@ -251,7 +275,7 @@ def liquid_state_machine(defaultclock, trial_no, path, quiet):
                              old_expr='g += weight')
     e_syn_model.modify_model('connection', 'i', key='j')
     e_syn_model.modify_model('parameters', 200*mV, key='weight')
-    label_readout = create_synapses(labels, readout, e_syn_model,
+    label_readout = create_synapses(teach_signal, readout, e_syn_model,
                                     name='label_readout')
 
     selected_exc_cells = np.random.choice(Ne, 4, replace=False)
@@ -269,48 +293,81 @@ def liquid_state_machine(defaultclock, trial_no, path, quiet):
     spkmon_e = SpikeMonitor(exc_cells)
     spkmon_i = SpikeMonitor(inh_cells)
     spkmon_ro = SpikeMonitor(readout)
+    # This just for classify on input directly
+    #spkmon_inp = SpikeMonitor(input_spikes)
     sttmon_e = StateMonitor(exc_cells, variables='Vm',
                             record=selected_exc_cells)
     sttmon_i = StateMonitor(inh_cells, variables='Vm',
                             record=selected_inh_cells)
     sttmon_ro = StateMonitor(readout, variables=['Vm', 'Vthr'],
-                             record=[0, 1])
+                             record=[x for x in range(num_labels)])
 
     kernel = kernels.GaussianKernel(sigma=30*q.ms)
-    run(sim_dur-test_dur)
+    print('Running simulation')
+    run(test_t)
 
     # TODO small weights e.g. 10 get stuck, high explodes e.g. 56. 1 kindda
     # works. 60 for small net
     # e_syn_model.modify_model('parameters', 60, key='weight')
+
+    # this for just weight decay
+    #readout.namespace['tau_thr'] = 30000*ms
+
     label_readout.namespace['w_factor'] = 0
     exc_readout.namespace['eta'] = 0*mV
     norm_factor = 0
+    # just to test weight decay
+    #asdf = 1
     #exc_readout.w_plast = '145*(w_plast/inc_w_post*mV)'
-    run(test_dur)
+    run(sim_dur-test_t)
     device.build()
 
-    # Process data for measuring accuracy
-    neo_spks = []
-    for spk_train in spkmon_e.spike_trains().values():
-        neo_spks.append(neo.SpikeTrain(spk_train/ms*q.ms,
-                                       t_stop=sim_dur/ms*q.ms))
-    data = BinnedSpikeTrain(neo_spks, bin_size=8*q.ms)
-    samples = []
-    for lt in labels_times:
-        # Not casting like below results in error!
-        ti = np.around(lt/ms - sequence_duration).astype(int)*q.ms
-        tf = np.around(lt/ms).astype(int)*q.ms
-        temp_data = data.time_slice(ti, tf).to_array()
-        samples.append(temp_data.flatten())
+    # TODO not used anymore. Idea was to count spikes instead of convolve by exp
+    ## Process data for measuring accuracy
+    #neo_spks = []
+    #for spk_trains in spkmon_e.spike_trains().values():
+    #    neo_spks.append(neo.SpikeTrain(spk_trains/ms*q.ms,
+    #                                   t_stop=sim_dur/ms*q.ms))
+    #data = BinnedSpikeTrain(neo_spks, bin_size=8*q.ms)
+    #samples = []
+    #for lt in events:
+    #    # Not casting like below results in error!
+    #    ti = np.around(lt[1]/ms).astype(int)*q.ms
+    #    tf = np.around(lt[2]/ms).astype(int)*q.ms
+    #    temp_data = data.time_slice(ti, tf).to_array()
+    #    samples.append(temp_data.flatten())
 
-    # TODO not working with more gap
-    #samples_size = len(labels_times)
-    #train_size = samples_size-test_size
-    #lr = LogisticRegression()
-    #lr.fit(samples[:train_size], labels_indices[:train_size])
-    #score = lr.score(samples[train_size:], labels_indices[train_size:])
-    #print('\n###################')
-    #print(f'Accuracy is {score}\n')
+    liquid_states = []
+    sim_times = np.arange(0, sim_dur/ms+1, defaultclock.dt/ms)
+    # TODO convolution for performance
+    #all_t=np.zeros(int(max(spk_trains)+1))
+    #all_t[(spk_trains).astype(int)]=1
+    #kernel=[np.exp(-x/30) for x in range(1000)]
+    #np.convolve(all_t, kernel)
+
+    # spkmon_inp for classify on input directly
+    #for spk_trains in list(spkmon_inp.spike_trains().values()):
+    for spk_trains in (list(spkmon_e.spike_trains().values())
+                       + list(spkmon_i.spike_trains().values())):
+        if len(spk_trains):
+            conv_spks = []
+            for spk in spk_trains:
+                aux_conv = (np.exp(-(sim_times - spk/ms) / 30)
+                             * (sim_times >= spk/ms))
+                aux_conv[np.isnan(aux_conv)] = 0
+                conv_spks.append(aux_conv)
+            conv_spks = sum(conv_spks)
+        else:
+            conv_spks = np.zeros_like(sim_times)
+        liquid_states.append(conv_spks)
+
+    samples_size = len(events)
+    train_size = samples_size-test_size
+    lr = LinearSVC()
+    liquid_states = np.array(liquid_states)
+    samples = liquid_states[:, [int(lbls_ts[2]/defaultclock.dt) for lbls_ts in events]]
+    lr.fit(samples[:, :train_size].T, [x[0] for x in events][:train_size])
+    print(f'Accuracy was {lr.score(samples[:, train_size:].T, [x[0] for x in events][train_size:])}')
 
     temp_trains = spkmon_e.spike_trains()
     spk_trains = [neo.SpikeTrain(temp_trains[x]/ms, t_stop=sim_dur/ms, units='ms')
@@ -337,7 +394,7 @@ def liquid_state_machine(defaultclock, trial_no, path, quiet):
         plot_state(sttmon_ro.t, sttmon_ro.Vthr[0], var_unit=mV, axes=ax0)
         plot_state(sttmon_ro.t, sttmon_ro.Vthr[1], var_unit=mV, axes=ax0)
         brian_plot(spkmon_ro, axes=ax3)
-        ax0.vlines((sim_dur-test_dur)/ms, 0, 1,
+        ax0.vlines((test_t)/ms, 0, 1,
                    transform=ax0.get_xaxis_transform(), colors='r')
         brian_plot(spkmon_e, axes=ax1)
         ax2.plot(input_times/ms, input_indices, '.')
@@ -370,9 +427,6 @@ def liquid_state_machine(defaultclock, trial_no, path, quiet):
         plt.ylabel('count')
         plt.xlabel('CV')
 
-        # TODO better organize somewhere else
-        import feather
-        import pandas as pd
         output_spikes = pd.DataFrame(
             {'time_ms': np.array(spkmon_ro.t/defaultclock.dt),
              'id': np.array(spkmon_ro.i)})
@@ -400,9 +454,9 @@ def liquid_state_machine(defaultclock, trial_no, path, quiet):
              'id': np.array(spkmon_e.i)})
         feather.write_dataframe(rec_spikes, f'{path}/rec_spikes.feather')
 
-        events = np.array([[ev[0], ev[1]/defaultclock.dt, ev[2]/defaultclock.dt] for ev in events])
-        events = pd.DataFrame(events, columns=['label', 'tstart_ms', 'tstop_ms'])
-        feather.write_dataframe(events, f'{path}/events_spikes.feather')
+        pd_events = np.array([[ev[0], ev[1]/defaultclock.dt, ev[2]/defaultclock.dt] for ev in events])
+        pd_events = pd.DataFrame(pd_events, columns=['label', 'tstart_ms', 'tstop_ms'])
+        feather.write_dataframe(pd_events, f'{path}/events_spikes.feather')
 
         links = pd.DataFrame(
             {'i': np.concatenate((exc_exc.i, exc_inh.i, inh_inh.i+Ne, inh_exc.i+Ne)),
