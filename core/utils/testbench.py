@@ -53,18 +53,26 @@ def create_sequence(items, intra_seq_dt):
     return {'indices': sequence_indices,
             'times': sequence_times}
 
-def create_testbench(sequences, occurences, inter_seq_dt, num_seq):
+def create_testbench(sequences, labels, occurences, inter_seq_dt, num_seq):
     """
     Parameters
     ----------
     sequences : list
         Contains sequences to be used as testbench
+    labels : list of int
+        Identifies labels of each sequence or class. Its order must be set
+        according to the order of the parameter sequences and must also have
+        the same length. When occurences is not None, label elements represent
+        the index of a given sequence in sequences.
     occurences: list of float
-        Probabilities that each sequence has appear in the final testbench.
+        Probabilities that each sequence has appear in the final testbench. If
+        it is None, parameter sequences is assumed to contain entire dataset
+        and it is therefore shuffled.
     inter_seq_dt : int
         Time gap between sequences, in ms
     num_seq : int
-        Total number of sequences
+        Total number of sequences. If parameter occurence is None, this will
+        not be used for anything.
 
     Returns
     -------
@@ -78,20 +86,23 @@ def create_testbench(sequences, occurences, inter_seq_dt, num_seq):
     """
     testbench_indices = []
     testbench_times = []
-    testbench = np.random.choice(sequences, num_seq, p=occurences)
+    rng = np.random.default_rng()
+    if occurences:
+        labels = rng.choice(labels, num_seq, p=occurences)
+        testbench = [sequences[x] for x in labels]
+    else:
+        id_perm = rng.permutation(range(len(labels)))
+        labels = [labels[x] for x in id_perm]
+        testbench = [sequences[x] for x in id_perm]
     events = []
 
     last_t = 0
-    for seq in testbench:
-        # Finds to which class sample belongs to
-        for idx, label in enumerate(sequences):
-            if seq['indices'] == label['indices']:
-                events.append([idx])
-
+    for i, seq in enumerate(testbench):
+        events.append([labels[i]])
         testbench_indices.extend(seq['indices'])
         testbench_times.extend([x+last_t for x in seq['times']])
         events[-1].extend([last_t*ms, max(testbench_times)*ms])
-        last_t = testbench_times[-1] + inter_seq_dt
+        last_t = max(testbench_times) + inter_seq_dt
 
     return testbench_indices, testbench_times, events
 
