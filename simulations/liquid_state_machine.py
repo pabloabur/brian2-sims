@@ -129,12 +129,18 @@ def liquid_state_machine(defaultclock, trial_no, path, quiet):
     cells = create_neurons(Nt, e_neu_model)
 
     # Random placement in a grid
-    net_grid = np.reshape(sample(range(Nt), k=Nt), (int(Nt/32), 2, 16))
-    for neu_id in np.nditer(net_grid):
-        positions = np.where(net_grid==int(neu_id))
-        cells[int(neu_id)].x = str(positions[0][0])
-        cells[int(neu_id)].y = str(positions[1][0])
-        cells[int(neu_id)].z = str(positions[2][0])
+    net_grid = np.arange(Nt)
+    np.random.shuffle(net_grid)
+    # Positions in x distributed in x according to size. y and z are 2x16
+    x_dist = int(Nt/32)
+    y_dim = 2
+    # First operation creates multiples of available grid points
+    cells.x = net_grid % x_dist
+    # For each previous repetition, similar operation to get next points. This is
+    # why previous dimension is divided, so it "waits" for x to cycle
+    cells.y = (net_grid // x_dist) % y_dim
+    # At last, multiple of both previous dimensions is divided
+    cells.z = net_grid // (x_dist*y_dim)
 
     exc_cells = cells[:Ne]
     inh_cells = cells[Ne:]
@@ -244,7 +250,7 @@ def liquid_state_machine(defaultclock, trial_no, path, quiet):
     #                         key='delay')
     e_syn_model.model += 'inc_w_post = w_plast : volt (summed)\n'
     norm_factor = 1
-    # not needed if using hSTDP
+    # needed for conventional normalization
     #e_syn_model.on_post += 'w_plast = int(norm_factor==1)*(w_plast/inc_w_post*mV) + int(norm_factor==0)*w_plast'
     e_syn_model.modify_model('model', 'dg_syn/dt = alpha_syn*g_syn',
                              old_expr='dg/dt = alpha_syn*g')
