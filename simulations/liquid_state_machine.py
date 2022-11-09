@@ -207,9 +207,9 @@ def liquid_state_machine(defaultclock, trial_no, path, quiet):
     e_neu_model.modify_model('namespace', 0.1*mV, key='thr_inc')
     e_neu_model.modify_model('parameters', 20*mV, key='Vthr')
     e_neu_model.modify_model('refractory', '20*ms')
-    e_neu_model.modify_model('model', 'gtot = gtot0 + gtot1',
+    e_neu_model.modify_model('model', 'gtot = gtot0 + gtot1 + gtot2',
                              old_expr='gtot = gtot0')
-    e_neu_model.model += 'gtot1 : volt\n'
+    e_neu_model.model += 'gtot1 : volt\ngtot2 : volt\n'
     # TODO remove unused if hSTDP is used instead of normalization
     e_neu_model.model += 'inc_w : volt\n'
     e_neu_model.model += 'incoming_weights : volt\n'
@@ -218,6 +218,17 @@ def liquid_state_machine(defaultclock, trial_no, path, quiet):
     teach_signal = SpikeGeneratorGroup(num_labels,
                                        [x[0] for x in events],
                                        [x[2] for x in events])
+
+    # This for an artificial WTA
+    #temp_time, temp_id = [], []
+    #for ev in events:
+    #    ev_interval = np.arange(ev[1]/ms, ev[2]/ms, 40)
+    #    ev_label = [x for x in labels if x != ev[0]]
+    #    aux_times = np.tile(ev_interval, len(ev_label))
+    #    aux_ind = np.repeat(ev_label, len(ev_interval))
+    #    temp_time.extend(aux_times)
+    #    temp_id.extend(aux_ind)
+    #antiteach_signal = SpikeGeneratorGroup(num_labels, temp_id, temp_time*ms)
 
     e_syn_model = hSTDP()
     e_syn_model.modify_model('on_pre', 'g_syn += w_plast',
@@ -246,7 +257,7 @@ def liquid_state_machine(defaultclock, trial_no, path, quiet):
     e_syn_model.modify_model('namespace', 1*mV, key='eta')
     # TODO do i need this? I DONT think so
     #e_syn_model.modify_model('parameters',
-    #                         f'{sequence_duration}*rand()*ms',
+    #                         '20*rand()*ms',
     #                         key='delay')
     e_syn_model.model += 'inc_w_post = w_plast : volt (summed)\n'
     norm_factor = 1
@@ -283,6 +294,19 @@ def liquid_state_machine(defaultclock, trial_no, path, quiet):
     e_syn_model.modify_model('parameters', 200*mV, key='weight')
     label_readout = create_synapses(teach_signal, readout, e_syn_model,
                                     name='label_readout')
+
+    # This for an artificial WTA
+    #e_syn_model = CUBA()
+    #e_syn_model.modify_model('model', 'dg_syn/dt = alpha_syn*g_syn',
+    #                         old_expr='dg/dt = alpha_syn*g')
+    #e_syn_model.modify_model('model', 'gtot2_post = g_syn*w_factor',
+    #                         old_expr='gtot0_post = g*w_factor')
+    #e_syn_model.modify_model('on_pre', 'g_syn += weight',
+    #                         old_expr='g += weight')
+    #e_syn_model.modify_model('connection', 'i', key='j')
+    #e_syn_model.modify_model('parameters', -20*mV, key='weight')
+    #antilabel_readout = create_synapses(antiteach_signal, readout, e_syn_model,
+    #                                    name='antilabel_readout')
 
     selected_exc_cells = np.random.choice(Ne, 4, replace=False)
     selected_inh_cells = np.random.choice(Ni, 4, replace=False)
