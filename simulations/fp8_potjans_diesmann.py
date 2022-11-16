@@ -60,9 +60,12 @@ filename = 'sim_data/PD.dat'
 """ =============== Neuron definitions =============== """
 fp8_values = range(128)
 neu_model = fp8LIF()
-# tau_syn=0.5ms, resulting in decimal alpha_syn of 0.333. Aproximated to 0.3125
-# original values were maintained, but some were quite different e.g. tau_m=10ms
-neu_model.modify_model('parameters', '42', key='alpha_syn')
+# tau_syn=0.5ms, resulting in decimal alpha_syn of 0.333. Approximated to 0.34375
+# Original tau_m=10ms approximated to 0.875, i.e. tau=7ms
+neu_model.modify_model('parameters', '43', key='alpha_syn')
+neu_model.modify_model('parameters', '54', key='alpha')
+# Set Vreset so as refractory period is 2ms
+neu_model.modify_model('parameters', '178', key='Vreset')
 neurons = create_neurons(N, neu_model)
 sampled_var = np.rint(np.clip(96 + 30*np.random.randn(N),
                               min(fp8_values),
