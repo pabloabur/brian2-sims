@@ -31,7 +31,7 @@ class fp8LIF(BaseNeuron):
             #refractory_decay = fp8_multiply(Vm, refrac_decay) : integer
             #refrac = fp8_smaller_than(Vm, Vrest) : integer
         self.threshold = 'Vm == Vthr'
-        self.refractory = 'fp8_smaller_than(Vm, Vrest)==0'
+        self.refractory = 'fp8_smaller_than(Vm, Vrest)==1'
         self.reset = '''
             Vm=Vreset;
             Vm_noise = 0*mV
@@ -40,11 +40,11 @@ class fp8LIF(BaseNeuron):
             'Vthr': 127,  # 480 in decimal
             })
         self.parameters = ParamDict({
-            'Vreset':  '255',  # -480 in decimal,
+            'Vreset':  '177',  # -0.5625 in decimal,
             'Vrest': '0',
             'Iconst': '0',
             'alpha': '55',  # 0.9375 in decimal,
-            'alpha_refrac': '11',  # 0.02148438 in decimal,
+            'alpha_refrac': '1',  # 0.00195312 in decimal
             'alpha_syn': '53',  # 0.8125 in decimal,
             'Vm': '0',
             'g': '0',
