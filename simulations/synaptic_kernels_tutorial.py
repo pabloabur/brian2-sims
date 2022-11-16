@@ -7,13 +7,13 @@ import matplotlib.pyplot as plt
 from brian2 import second, ms, mV, mA, prefs, run,\
     SpikeMonitor, StateMonitor,\
     SpikeGeneratorGroup, ExplicitStateUpdater, defaultclock
-from teili.tools.misc import DEFAULT_FUNCTIONS, minifloat2decimal,\
+from core.utils.misc import DEFAULT_FUNCTIONS, minifloat2decimal,\
         decimal2minifloat
-from builder.groups_builder import create_synapses, create_neurons
-from equations.neurons.fp8LIF import fp8LIF
-from equations.synapses.fp8CUBA import fp8CUBA
-from equations.neurons.LIF import LIF
-from equations.synapses.CUBA import CUBA
+from core.builder.groups_builder import create_synapses, create_neurons
+from core.equations.neurons.fp8LIF import fp8LIF
+from core.equations.synapses.fp8CUBA import fp8CUBA
+from core.equations.neurons.LIF import LIF
+from core.equations.synapses.CUBA import CUBA
 
 prefs.codegen.target = "numpy"
 defaultclock.dt = 1*ms

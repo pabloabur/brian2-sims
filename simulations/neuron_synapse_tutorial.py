@@ -97,11 +97,7 @@ statemon_test_neurons2 = StateMonitor(test_neurons2,
                                       record=0)
 
 # Monitoring 8-bit models
-statemon_input_synapse2 = StateMonitor(
-    test_neurons3, variables='gtot', record=True)
 spikemon_test_neurons4 = SpikeMonitor(test_neurons4)
-statemon_test_synapse2 = StateMonitor(
-    test_neurons4, variables='gtot', record=True)
 statemon_test_neurons3 = StateMonitor(test_neurons3, variables=[
     'gtot', "Vm"], record=[0, 1])
 statemon_test_neurons4 = StateMonitor(test_neurons4,
