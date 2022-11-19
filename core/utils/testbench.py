@@ -53,7 +53,7 @@ def create_sequence(items, intra_seq_dt):
     return {'indices': sequence_indices,
             'times': sequence_times}
 
-def create_testbench(sequences, labels, occurences, inter_seq_dt, num_seq):
+def create_testbench(sequences, labels, occurences, inter_seq_dt, num_seq, silence=None):
     """
     Parameters
     ----------
@@ -73,6 +73,10 @@ def create_testbench(sequences, labels, occurences, inter_seq_dt, num_seq):
     num_seq : int
         Total number of sequences. If parameter occurence is None, this will
         not be used for anything.
+    silence : dict
+        Determines whether there are arbitrary gaps with arbitrary duration in
+        the testbench. Must have keys 'iteration' (at which it happens)
+        and 'duration'. It is added at the end of iteration.
 
     Returns
     -------
@@ -86,6 +90,8 @@ def create_testbench(sequences, labels, occurences, inter_seq_dt, num_seq):
     """
     testbench_indices = []
     testbench_times = []
+    if not silence:
+        silence = {'iteration': []}
     rng = np.random.default_rng()
     if occurences:
         labels = rng.choice(labels, num_seq, p=occurences)
@@ -103,6 +109,9 @@ def create_testbench(sequences, labels, occurences, inter_seq_dt, num_seq):
         testbench_times.extend([x+last_t for x in seq['times']])
         events[-1].extend([last_t*ms, max(testbench_times)*ms])
         last_t = max(testbench_times) + inter_seq_dt
+        if i in silence['iteration']:
+            ind = silence['iteration'].index(i)
+            last_t += silence['duration'][ind]
 
     return testbench_indices, testbench_times, events
 
