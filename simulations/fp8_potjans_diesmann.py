@@ -18,19 +18,28 @@ import scipy.stats as sc
 
 import sys
 import gc
+from datetime import datetime
 
 from core.equations.neurons.fp8LIF import fp8LIF
 from core.equations.synapses.fp8CUBA import fp8CUBA
 from core.builder.groups_builder import create_synapses, create_neurons
 from core.utils.misc import minifloat2decimal, decimal2minifloat
 
-tsim = float(sys.argv[1])   # time of simulation
+protocol = int(sys.argv[1])
+tsim = 10
 s = 1000
 seed(s)
 defaultclock.dt = 1*ms
-set_device('cpp_standalone', directory='/scratch/lf11/pu6813/code')
+save_path = '/scratch/jr22/pu6813/'
+code_name = f'code_{protocol}/'
+set_device('cpp_standalone', directory=save_path+code_name)
 
-bg_freq = 50.0                    # default value for background rate
+# default value for background rate was not 8 as in original paper because
+# I am using a slightly different way of generating poisson input
+if protocol == 1:
+    bg_freq = float(sys.argv[2])
+if protocol == 2:
+    bg_freq = 50.0
 
 """ =================== Parameters =================== """
 ###############################################################################
@@ -55,15 +64,22 @@ table = array([[0.101,  0.169, 0.044, 0.082, 0.032, 0.,     0.008, 0.,     0.   
                [0.016,  0.007, 0.021, 0.017, 0.057, 0.020,  0.040, 0.225,  0.0512],
                [0.036,  0.001, 0.003, 0.001, 0.028, 0.008,  0.066, 0.144,  0.0196]])
 
-filename = 'sim_data/PD.dat'
+# Original excitatory weights were 87.8pA with std 8.78pA. Values below were
+# chosen so as to ensure good activity under input adopted.
+w_ex = 58
+w_ex_2 = 66
+if protocol == 1:
+    w_in = int(sys.argv[3])
+if protocol == 2:
+    w_in = 74
 
 """ =============== Neuron definitions =============== """
 fp8_values = range(128)
 neu_model = fp8LIF()
 # tau_syn=0.5ms, resulting in decimal alpha_syn of 0.333. Approximated to 0.34375
-# Original tau_m=10ms approximated to 0.875, i.e. tau=7ms
+# Original tau_m=10ms approximated to 0.9375, i.e. tau=15ms
 neu_model.modify_model('parameters', '43', key='alpha_syn')
-neu_model.modify_model('parameters', '54', key='alpha')
+neu_model.modify_model('parameters', '55', key='alpha')
 # Set Vreset so as refractory period is 2ms
 neu_model.modify_model('parameters', '178', key='Vreset')
 neurons = create_neurons(N, neu_model)
@@ -73,7 +89,6 @@ sampled_var = np.rint(np.clip(96 + 30*np.random.randn(N),
 neurons.Vm = sampled_var
 
 """ ==================== Networks ==================== """
-# Weight values were 87.8pA with std 8.78pA
 bg_layer = array([1600, 1500 ,2100, 1900, 2000, 1900, 2900, 2100])
 
 pop = [] # Stores NeuronGroups, one for each population
@@ -104,13 +119,13 @@ for c in range(0, 8):
                 # Synaptic weight from L4e to L2/3e is doubled
                 if c == 2 and r == 0:
                     # ranging between 16 and 24 in decimal
-                    sampled_var = np.rint(np.clip(66 + 10*np.random.randn(nsyn),
+                    sampled_var = np.rint(np.clip(w_ex_2 + 10*np.random.randn(nsyn),
                                                   min(fp8_values),
                                                   max(fp8_values)))
                     con[-1].weight = sampled_var
                 else:
                     # ranging between 8 and 12 in decimal
-                    sampled_var = np.rint(np.clip(58 + 10*np.random.randn(nsyn),
+                    sampled_var = np.rint(np.clip(w_ex + 10*np.random.randn(nsyn),
                                                   min(fp8_values),
                                                   max(fp8_values)))
                     con[-1].weight = sampled_var
@@ -119,8 +134,8 @@ for c in range(0, 8):
 
             # Inhibitory connections
             else:
-                # ranging between 32 and 52 in decimal
-                sampled_var = np.rint(np.clip(74 + 10*np.random.randn(nsyn),
+                # ranging between 32 and 52 in decimal (protocol 2)
+                sampled_var = np.rint(np.clip(w_in + 10*np.random.randn(nsyn),
                                               min(fp8_values),
                                               max(fp8_values)))
                 con[-1].weight = sampled_var
@@ -136,6 +151,27 @@ for r in range(0, 8):
     poisson_pop.append(PoissonGroup(bg_layer[r], rates=bg_freq*Hz))
     bg_in.append(create_synapses(poisson_pop[-1], pop[r], syn_model))
 
+if protocol == 2:
+    thal_con = []
+    thal_input = []
+    stimulus = TimedArray(np.tile([0 for _ in range(70)]
+                                  + [960] # TODO maybe not necessary? was 120
+                                  + [0 for _ in range(29)], tsim)*Hz,
+                   dt=10.*ms)
+    thal_input = PoissonGroup(n_layer[8], rates='stimulus(t)')
+    thal_nsyn = []
+    for r in range(0, 8):
+        conn_mat = np.random.choice([0, 1],
+                                    size=(thal_input.N, pop[r].N),
+                                    p=[1-table[r][8], table[r][8]])
+        sources, targets = conn_mat.nonzero()
+        if not np.any(sources):
+            continue
+        thal_nsyn.append(len(sources))
+        syn_model.modify_model('connection', sources, key='i')
+        syn_model.modify_model('connection', targets, key='j')
+        thal_con.append(create_synapses(thal_input, pop[r], syn_model))
+
 ###########################################################################
 # Creating spike monitors
 ###########################################################################
@@ -145,15 +181,24 @@ smon_net = SpikeMonitor(neurons)
 """ ==================== Running ===================== """
 net = Network(collect())
 
-net.add(neurons,pop, con, bg_in, poisson_pop)    # Adding objects to the simulation
-net.run(tsim*second, report='stdout')
+net.add(neurons, pop, con, bg_in, poisson_pop)
 
-savetxt(filename, c_[smon_net.i,smon_net.t/ms],fmt="%i %.2f")
+if protocol == 1:
+    net.run(tsim*second, report='stdout')
+elif protocol == 2:
+    net.add(thal_input, thal_con)
 
-gc.collect()    #garbage collector to clean memory
+    for i, nsyn in enumerate(thal_nsyn):
+        sampled_var = np.rint(np.clip(w_ex_2 + 10*np.random.randn(nsyn),
+                                      min(fp8_values),
+                                      max(fp8_values)))
+        thal_con[i].weight = sampled_var
+    net.run(tsim*second, report='stdout')
+gc.collect()
 
 """ ==================== Plotting ==================== """
-data = pd.read_csv(filename, sep=" ", header=None, names=['i','t'])
+data = pd.DataFrame({'i': np.array(smon_net.i),
+                     't': np.array(smon_net.t/defaultclock.dt)})
 
 # cortical layer labels: e for excitatory; i for inhibitory
 lname = ['L23e', 'L23i', 'L4e', 'L4i', 'L5e', 'L5i','L6e', 'L6i']
@@ -222,7 +267,10 @@ for i in range(len(lname)):
 
     acum_index = acum_index + (index_end-index_start)
 
-plt.xlim(tsim-400/1000.0,tsim)
+if protocol == 1:
+    plt.xlim(tsim-400/1000.0, tsim)
+elif protocol == 2:
+    plt.xlim(600, 800)
 plt.ylim(0,acum_index)
 plt.xlabel('time [s]')
 plt.ylabel(' ')
@@ -280,7 +328,7 @@ sync = []
 bins = np.arange(0,tsim*1000.0+3.0,3)
 
 for i in range(len(lname)):
-    index_sample = spk_neuron[spk_neuron.layer.isin([lname[i]])]
+    index_sample = spk_neuron.i[spk_neuron.layer.isin([lname[i]])]
     count, division = np.histogram(data.t[data.i.isin(index_sample)],bins=bins)
     sync.append(np.var(count[166:])/np.mean(count[166:]))
 
@@ -294,6 +342,54 @@ plt.ylabel("")
 plt.xlabel('synchrony')
 plt.gca().invert_yaxis()
 
+########################################################################
+# AIness measure: f<30Hz & 0.7<=cv<1.2 & sync_index <= 8
+########################################################################
+measures_layer['AI'] = (measures_layer.f<30)&(measures_layer.sync<=8)&\
+                        (measures_layer.cv>=0.7)&(measures_layer.cv<1.2)
+
+# % of layers in the AIness range
+ainess = 100*sum(measures_layer.AI)/8.0
+
+measures_layer.to_csv(save_path + f'measures_prot{protocol}_bg{bg_freq}_win{w_in}.csv')
+
 plt.tight_layout()
 plt.subplots_adjust(left=0.07)
-plt.savefig('./sim_data/fig2.pdf', dpi=600)
+plt.savefig(save_path + f'fig_plots_prot{protocol}_bg{bg_freq}_win{w_in}.pdf', dpi=600)
+
+###############################################################################
+# Population spike counts
+###############################################################################
+if protocol == 2:
+    spk_count = []
+    bins = np.arange(0,tsim*1000.0+.5,.5)
+
+    for i in range(len(lname)):
+        index_start = l_bins[i]
+        index_end = l_bins[i]+int(psample*n_layer[i+1])
+        count, division = np.histogram(data.t[data.i.isin(np.arange(index_start,index_end))],bins=bins)
+        count = np.sum(np.split(count, tsim), axis=0) / float(tsim)
+        spk_count.append([count])
+
+    measures_layer['spk_count'] = spk_count
+    date_time = datetime.now()
+    measures_layer.to_csv(
+        save_path
+        + f"""hist_{date_time.strftime('%Y.%m.%d')}_{date_time.hour}.{date_time.minute}.csv""")
+
+    for i in range(0,len(lname),2):
+        plt.subplot2grid((4, 3), (int(i/2), 1), colspan=2)
+        plt.step(np.arange(-10,30,0.5), measures_layer.spk_count[i][0][1380:1460], label=lname[i])
+        plt.step(np.arange(-10,30,0.5), measures_layer.spk_count[i+1][0][1380:1460], label=lname[i+1])
+        plt.legend()
+        if i != 6:
+            ax = plt.gca()
+            ax.xaxis.set_visible(False)
+        else:
+            ax = plt.gca()
+            ax.yaxis.set_visible(True)
+        plt.ylim(0, 15)
+
+    plt.tight_layout()
+    plt.subplots_adjust(left=0.07)
+    plt.savefig(save_path + f'fig_hist.pdf', dpi=600)
