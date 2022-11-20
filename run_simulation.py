@@ -8,6 +8,9 @@ from brian2 import ms
 from simulations.liquid_state_machine import liquid_state_machine
 
 parser = argparse.ArgumentParser(description='LSM with distinct resolutions')
+parser.add_argument('--size', type=int, default=128, help='size of the liquid')
+parser.add_argument('--precision', type=str, default='fp64',
+                    help='Bit precision used. Currently only supports 8 and 64')
 parser.add_argument('--trial', type=int, default=0, help='trial number')
 parser.add_argument('--path', default=None, help='directory to save')
 parser.add_argument('--quiet', action='store_true',
@@ -16,6 +19,8 @@ parser.add_argument('--backend', type=str, default='numpy',
                     help='Backend used by brian2 to run simulation')
 args = parser.parse_args()
 backend = args.backend
+size = args.size
+precision = args.precision
 trial_no = args.trial
 path = args.path
 quiet = args.quiet
@@ -36,4 +41,4 @@ if not path:
     path = f"""{date_time.strftime('%Y.%m.%d')}_{date_time.hour}.{date_time.minute}/"""
 os.makedirs(path)
 
-liquid_state_machine(defaultclock, trial_no, path, quiet)
+liquid_state_machine(size, precision, defaultclock, trial_no, path, quiet)

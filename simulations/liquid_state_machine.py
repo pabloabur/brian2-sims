@@ -1,9 +1,9 @@
 from brian2 import SpikeMonitor, StateMonitor, SpikeGeneratorGroup
-from brian2 import run, ms, mV
+from brian2 import run, ms, mV, pF
 from brian2 import device
 from brian2 import TimedArray
 
-from core.utils.misc import decimal2minifloat
+from core.utils.misc import decimal2minifloat, minifloat2decimal
 
 from core.equations.neurons.fp8LIF import fp8LIF
 from core.equations.synapses.fp8CUBA import fp8CUBA
@@ -39,8 +39,7 @@ import feather
 from sklearn.svm import LinearSVC
 
 
-def liquid_state_machine(defaultclock, trial_no, path, quiet):
-    precision = 'fp64'
+def liquid_state_machine(size, precision, defaultclock, trial_no, path, quiet):
     # freezing noise
     #import random
     #random.seed(25)
@@ -81,20 +80,20 @@ def liquid_state_machine(defaultclock, trial_no, path, quiet):
     probs = [.5, .5]
 
     # this for mus silicium
-    #mus_silic = pd.read_csv(
-    #    'spikes.csv', names=['speaker', 'digit']+[f'ch{i}' for i in range(40)])
-    #labels = mus_silic.loc[:, 'digit'].values.tolist()
-    #num_labels = len(np.unique(labels))
-    #mus_silic = mus_silic.loc[:, ~mus_silic.columns.isin(['speaker', 'digit'])].values.tolist()
+    mus_silic = pd.read_csv(
+        'spikes.csv', names=['speaker', 'digit']+[f'ch{i}' for i in range(40)])
+    labels = mus_silic.loc[:, 'digit'].values.tolist()
+    num_labels = len(np.unique(labels))
+    mus_silic = mus_silic.loc[:, ~mus_silic.columns.isin(['speaker', 'digit'])].values.tolist()
     #mus_silic = [mus_silic[i] for i, x in enumerate(labels) if x==0 or x==1]
     #labels = [x for i, x in enumerate(labels) if x==0 or x==1]
-    #sequences = []
-    #for spk_t in mus_silic:
-    #    seq_i = [x for x in range(len(spk_t)) if not math.isnan(spk_t[x])]
-    #    seq_t = np.array([x for x in spk_t if str(x) != 'nan']) - np.nanmin(spk_t)
-    #    sequences.append({'times': seq_t, 'indices': seq_i})
-    #probs = None
-    #repetitions = len(sequences)
+    sequences = []
+    for spk_t in mus_silic:
+        seq_i = [x for x in range(len(spk_t)) if not math.isnan(spk_t[x])]
+        seq_t = np.array([x for x in spk_t if str(x) != 'nan']) - np.nanmin(spk_t)
+        sequences.append({'times': seq_t, 'indices': seq_i})
+    probs = None
+    repetitions = len(sequences)
 
     silence = None
 
@@ -119,8 +118,7 @@ def liquid_state_machine(defaultclock, trial_no, path, quiet):
                                        input_times)
 
     """ =================== Neurons =================== """
-    # sizes from 128, 256, 512, 1024, 2048, 4096. Original was 4084
-    Nt = 128
+    Nt = size
     Ne, Ni = np.rint(Nt*.85).astype(int), np.rint(Nt*.15).astype(int)
     # In case rounding makes a difference
     Nt = Ne + Ni
@@ -140,6 +138,12 @@ def liquid_state_machine(defaultclock, trial_no, path, quiet):
                                'gtot = gtot0 + gtot1 + gtot2 + gtot3',
                                old_expr='gtot = gtot0')
         e_neu_model.model += 'gtot1 : volt\ngtot2 : volt\ngtot3 : volt\n'
+        # changing original parameters to make simulations similar
+        e_neu_model.modify_model('namespace', 150*pF, key='Cm')
+    if precision == 'fp8':
+        e_neu_model.modify_model('parameters',
+                                 decimal2minifloat(.875),
+                                 key='alpha_syn')
 
     # for emulating sleep
     # TODO timestamp and pattern with label to create_testbench? to be inserted into testbench
@@ -168,7 +172,7 @@ def liquid_state_machine(defaultclock, trial_no, path, quiet):
     y_dim = 2
     # First operation creates multiples of available grid points
     cells.x = net_grid % x_dist
-    # For each previous repetition, similar operation to get next points. This is
+    # For each previous repetition, same operation to get next points. This is
     # why previous dimension is divided, so it "waits" for x to cycle
     cells.y = (net_grid // x_dist) % y_dim
     # At last, multiple of both previous dimensions is divided
@@ -238,6 +242,8 @@ def liquid_state_machine(defaultclock, trial_no, path, quiet):
     if precision == 'fp64':
         e_syn_model.modify_model('parameters', 80*mV, key='weight')
         e_syn_model.modify_model('model', 'gtot1_post', old_expr='gtot0_post')
+        # changing original parameters to make simulations similar
+        e_syn_model.modify_model('parameters', '7*ms', key='tau_syn')
     thl_conns = create_synapses(input_spikes, cells, e_syn_model)
 
     e_syn_model = liquid_syn()
@@ -253,6 +259,8 @@ def liquid_state_machine(defaultclock, trial_no, path, quiet):
     elif precision == 'fp64':
         e_syn_model.modify_model('model', 'gtot2_post', old_expr='gtot0_post')
         e_syn_model.modify_model('parameters', 20*mV, key='weight')
+        # changing original parameters to make simulations similar
+        e_syn_model.modify_model('parameters', '7*ms', key='tau_syn')
     exc_exc = create_synapses(exc_cells, exc_cells, e_syn_model)
 
     e_syn_model.modify_model(
@@ -277,6 +285,8 @@ def liquid_state_machine(defaultclock, trial_no, path, quiet):
         i_syn_model.modify_model('namespace', -1, key='w_factor')
         i_syn_model.modify_model('parameters', 100*mV, key='weight')
         i_syn_model.modify_model('model', 'gtot3_post', old_expr='gtot0_post')
+        # changing original parameters to make simulations similar
+        i_syn_model.modify_model('parameters', '7*ms', key='tau_syn')
     inh_inh = create_synapses(inh_cells, inh_cells, i_syn_model)
 
     i_syn_model.modify_model(
@@ -488,36 +498,30 @@ def liquid_state_machine(defaultclock, trial_no, path, quiet):
 
     liquid_states = []
     sim_times = np.arange(0, sim_dur/ms+1, defaultclock.dt/ms)
-    # TODO convolution for performance
-    #all_t=np.zeros(int(max(spk_trains)+1))
-    #all_t[(spk_trains).astype(int)]=1
-    #kernel=[np.exp(-x/30) for x in range(1000)]
-    #np.convolve(all_t, kernel)
+    exp_kernel=[np.exp(-x/30) for x in range(1000)]
 
     ## spkmon_inp for classify on input directly
-    ##for spk_trains in list(spkmon_inp.spike_trains().values()):
-    #for spk_trains in (list(spkmon_e.spike_trains().values())
-    #                   + list(spkmon_i.spike_trains().values())):
-    #    if len(spk_trains):
-    #        conv_spks = []
-    #        for spk in spk_trains:
-    #            aux_conv = (np.exp(-(sim_times - spk/ms) / 30)
-    #                         * (sim_times >= spk/ms))
-    #            aux_conv[np.isnan(aux_conv)] = 0
-    #            conv_spks.append(aux_conv)
-    #        conv_spks = sum(conv_spks)
-    #    else:
-    #        conv_spks = np.zeros_like(sim_times)
-    #    liquid_states.append(conv_spks)
+    #for spk_trains in list(spkmon_inp.spike_trains().values()):
+    for spk_trains in (list(spkmon_e.spike_trains().values())
+                       + list(spkmon_i.spike_trains().values())):
+        conv_spks = np.zeros_like(sim_times)
+        if len(spk_trains):
+            conv_spks[np.around(spk_trains/defaultclock.dt).astype(int)] = 1
+            conv_spks = np.convolve(conv_spks, exp_kernel)
+        liquid_states.append(conv_spks[:len(sim_times)])
 
     # Linear classifier
-    #samples_size = len(events)
-    #train_size = samples_size-test_size
-    #lr = LinearSVC()
-    #liquid_states = np.array(liquid_states)
-    #samples = liquid_states[:, [int(lbls_ts[2]/defaultclock.dt) for lbls_ts in events]]
-    #lr.fit(samples[:, :train_size].T, [x[0] for x in events][:train_size])
-    #print(f'Accuracy was {lr.score(samples[:, train_size:].T, [x[0] for x in events][train_size:])}')
+    samples_size = len(events)
+    train_size = samples_size-test_size
+    lr = LinearSVC()
+    liquid_states = np.array(liquid_states)
+    labels_times = [int(lbls_ts[2]/defaultclock.dt) for lbls_ts in events]
+    samples = liquid_states[:, labels_times]
+    lr.fit(samples[:, :train_size].T, [x[0] for x in events][:train_size])
+    acc = lr.score(samples[:, train_size:].T, [x[0] for x in events][train_size:])
+    print(f'Accuracy was {acc}')
+    with open(f'size_{size}-FP_{precision}-trial_{trial_no}.txt', 'w') as f:
+        f.write(f'{acc:.2f}')
 
     temp_trains = spkmon_e.spike_trains()
     spk_trains = [neo.SpikeTrain(temp_trains[x]/ms, t_stop=sim_dur/ms, units='ms')
@@ -536,6 +540,13 @@ def liquid_state_machine(defaultclock, trial_no, path, quiet):
     np.savez(f'{path}/rates.npz',
              times=np.array(pop_rates.times),
              rates=np.array(pop_avg_rates))
+
+    # TODO remove it. Just wanted to compare membrane
+    #test_time = sttmon_e.t/defaultclock.dt
+    #if precision=='fp64': test_v = sttmon_e.Vm[0]/mV/20
+    #elif precision=='fp8': test_v = minifloat2decimal(sttmon_e.Vm[0])/480
+    #test_memb = pd.DataFrame({'time_ms': test_time, 'norm_Vm': test_v})
+    #feather.write_dataframe(test_memb, f'{path}/test_memb.feather')
 
     if not quiet:
         fig,  (ax0, ax1, ax2, ax3) = plt.subplots(4, 1, sharex=True)
