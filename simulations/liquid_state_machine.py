@@ -22,9 +22,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 import json
 from random import uniform, sample
-import git
-import sys
-sys.path.extend([git.Repo('.').git.rev_parse('--show-toplevel')])
 
 import neo
 import quantities as q
@@ -39,7 +36,7 @@ import feather
 from sklearn.svm import LinearSVC
 
 
-def liquid_state_machine(size, precision, defaultclock, trial_no, path, quiet):
+def liquid_state_machine(size, precision, defaultclock, trial_no, save_path, code_path, quiet):
     # freezing noise
     #import random
     #random.seed(25)
@@ -56,7 +53,7 @@ def liquid_state_machine(size, precision, defaultclock, trial_no, path, quiet):
 
     """ =================== Inputs =================== """
     item_rate = 128
-    repetitions = 140
+    repetitions = 800
     inter_spk_interval = np.ceil(1/item_rate*1000).astype(int)
     inter_seq_interval = 200
     item_spikes = 1
@@ -80,26 +77,26 @@ def liquid_state_machine(size, precision, defaultclock, trial_no, path, quiet):
     probs = [.5, .5]
 
     # this for mus silicium
-    mus_silic = pd.read_csv(
-        'spikes.csv', names=['speaker', 'digit']+[f'ch{i}' for i in range(40)])
-    labels = mus_silic.loc[:, 'digit'].values.tolist()
-    num_labels = len(np.unique(labels))
-    mus_silic = mus_silic.loc[:, ~mus_silic.columns.isin(['speaker', 'digit'])].values.tolist()
-    #mus_silic = [mus_silic[i] for i, x in enumerate(labels) if x==0 or x==1]
-    #labels = [x for i, x in enumerate(labels) if x==0 or x==1]
-    sequences = []
-    for spk_t in mus_silic:
-        seq_i = [x for x in range(len(spk_t)) if not math.isnan(spk_t[x])]
-        seq_t = np.array([x for x in spk_t if str(x) != 'nan']) - np.nanmin(spk_t)
-        sequences.append({'times': seq_t, 'indices': seq_i})
-    probs = None
-    repetitions = len(sequences)
+    #mus_silic = pd.read_csv(
+    #    'spikes.csv', names=['speaker', 'digit']+[f'ch{i}' for i in range(40)])
+    #labels = mus_silic.loc[:, 'digit'].values.tolist()
+    #num_labels = len(np.unique(labels))
+    #mus_silic = mus_silic.loc[:, ~mus_silic.columns.isin(['speaker', 'digit'])].values.tolist()
+    ##mus_silic = [mus_silic[i] for i, x in enumerate(labels) if x==0 or x==1]
+    ##labels = [x for i, x in enumerate(labels) if x==0 or x==1]
+    #sequences = []
+    #for spk_t in mus_silic:
+    #    seq_i = [x for x in range(len(spk_t)) if not math.isnan(spk_t[x])]
+    #    seq_t = np.array([x for x in spk_t if str(x) != 'nan']) - np.nanmin(spk_t)
+    #    sequences.append({'times': seq_t, 'indices': seq_i})
+    #probs = None
+    #repetitions = len(sequences)
 
     silence = None
 
     # for emulating sleep
-    #sleep_iter = 50
-    #silence = {'iteration': [sleep_iter], 'duration': [10000]}
+    sleep_iter = 200
+    silence = {'iteration': [sleep_iter], 'duration': [10000]}
 
     input_indices, input_times, events = create_testbench(sequences,
                                                           labels,
@@ -111,7 +108,7 @@ def liquid_state_machine(size, precision, defaultclock, trial_no, path, quiet):
     input_times = np.array(input_times) * ms
     num_channels = int(max(input_indices) + 1)
     sim_dur = events[-1][2] + inter_seq_interval*ms
-    test_size = 20
+    test_size = 100
     test_t = events[-test_size][2] + inter_seq_interval*ms
     input_spikes = SpikeGeneratorGroup(num_channels,
                                        input_indices,
@@ -138,8 +135,9 @@ def liquid_state_machine(size, precision, defaultclock, trial_no, path, quiet):
                                'gtot = gtot0 + gtot1 + gtot2 + gtot3',
                                old_expr='gtot = gtot0')
         e_neu_model.model += 'gtot1 : volt\ngtot2 : volt\ngtot3 : volt\n'
+        # TODO similar stuff makes them fire a lot; use it?
         # changing original parameters to make simulations similar
-        e_neu_model.modify_model('namespace', 150*pF, key='Cm')
+        #e_neu_model.modify_model('namespace', 150*pF, key='Cm')
     if precision == 'fp8':
         e_neu_model.modify_model('parameters',
                                  decimal2minifloat(.875),
@@ -148,19 +146,19 @@ def liquid_state_machine(size, precision, defaultclock, trial_no, path, quiet):
     # for emulating sleep
     # TODO timestamp and pattern with label to create_testbench? to be inserted into testbench
     # TODO sleep cycles (check ~/test.py)
-    #sleep_time = events[sleep_iter][2]
-    #wake_time = events[sleep_iter+1][1]
-    #if precision == 'fp64':
-    #    e_neu_model.modify_model(
-    #        'model',
-    #        'Iconst = 0*pA + 200*pA*int(t>sleep_time)*int(t<wake_time) : ampere',
-    #        old_expr='Iconst : ampere')
-    #else:
-    #    e_neu_model.modify_model(
-    #        'model',
-    #        'Iconst = 0 + 200*int(t>sleep_time)*int(t<wake_time) : ampere',
-    #        old_expr='Iconst : ampere')
-    #del e_neu_model.parameters['Iconst']
+    sleep_time = events[sleep_iter][2]
+    wake_time = events[sleep_iter+1][1]
+    if precision == 'fp64':
+        e_neu_model.modify_model(
+            'model',
+            'Iconst = 0*pA + 200*pA*int(t>sleep_time)*int(t<wake_time) : ampere',
+            old_expr='Iconst : ampere')
+    else:
+        e_neu_model.modify_model(
+            'model',
+            'Iconst = 0 + 200*int(t>sleep_time)*int(t<wake_time) : ampere',
+            old_expr='Iconst : ampere')
+    del e_neu_model.parameters['Iconst']
 
     cells = create_neurons(Nt, e_neu_model)
 
@@ -185,52 +183,45 @@ def liquid_state_machine(size, precision, defaultclock, trial_no, path, quiet):
     e_neu_model = LIFIP()
 
     # for emulating sleep
-    #e_neu_model.model += 'dCa/dt = (500/501)*Ca/second : 1\n'
-    #e_neu_model.reset += 'Ca += .1\n'
+    e_neu_model.model += 'dCa/dt = (500/501)*Ca/second : 1\n'
+    e_neu_model.reset += 'Ca += .1\n'
 
-    e_neu_model.modify_model('parameters', 20*mV, key='Vthr')
+    e_neu_model.modify_model('parameters', 10*mV, key='Vthr')
     e_neu_model.modify_model('namespace', 0*mV, key='thr_inc')
-    e_neu_model.modify_model('namespace', 120000*ms, key='tau_thr')
+    # TODO maybe not too slow
+    e_neu_model.modify_model('namespace', 300000*ms, key='tau_thr')
 
     # for when intrinsic plasticity is NOT to be used
-    e_neu_model.modify_model(
-        'model',
-        'Vthr',
-        old_expr='(alpha_thr*Vthr + dt*alpha_thr*thr_min/tau_thr)')
+    #e_neu_model.modify_model(
+    #    'model',
+    #    'Vthr',
+    #    old_expr='(alpha_thr*Vthr + dt*alpha_thr*thr_min/tau_thr)')
 
     # for when intrinsic plasticity is to be used
-    #e_neu_model.modify_model('namespace', 0.1*mV, key='thr_inc')
+    # TODO i might need to be faster: 5 instead of 2
+    e_neu_model.modify_model('namespace', 0.005*mV, key='thr_inc')
 
-    e_neu_model.modify_model('model', 'gtot = gtot0 + gtot1 + gtot2 + gtot3',
+    e_neu_model.modify_model('model', 'gtot = gtot0 + gtot1 + gtot2 + gtot3 + gtot4',
                              old_expr='gtot = gtot0')
-    e_neu_model.model += 'gtot1 : volt\ngtot2 : volt\ngtot3 : volt\n'
+    e_neu_model.model += 'gtot1 : volt\ngtot2 : volt\ngtot3 : volt\ngtot4 : volt\n'
     # TODO remove unused if hSTDP is used instead of normalization
     e_neu_model.model += 'inc_w : volt\n'
     e_neu_model.model += 'incoming_weights : volt\n'
 
     # for emulating sleep
-    #e_neu_model.modify_model(
-    #    'model',
-    #    'Iconst = 0*pA + 200*pA*int(t>sleep_time)*int(t<wake_time) : ampere',
-    #    old_expr='Iconst : ampere')
-    #del e_neu_model.parameters['Iconst']
+    e_neu_model.modify_model(
+        'model',
+        'Iconst = 0*pA + 200*pA*int(t>sleep_time)*int(t<wake_time) : ampere',
+        old_expr='Iconst : ampere')
+    del e_neu_model.parameters['Iconst']
 
     readout = create_neurons(num_labels, e_neu_model, name='readout')
+    # For an WTA
+    #inhreadout = create_neurons(1, e_neu_model, name='inhreadout')
 
     teach_signal = SpikeGeneratorGroup(num_labels,
                                        [x[0] for x in events],
                                        [x[2] for x in events])
-
-    # This for an artificial WTA
-    #temp_time, temp_id = [], []
-    #for ev in events:
-    #    ev_interval = np.arange(ev[1]/ms, ev[2]/ms, 40)
-    #    ev_label = [x for x in labels if x != ev[0]]
-    #    aux_times = np.tile(ev_interval, len(ev_label))
-    #    aux_ind = np.repeat(ev_label, len(ev_interval))
-    #    temp_time.extend(aux_times)
-    #    temp_id.extend(aux_ind)
-    #antiteach_signal = SpikeGeneratorGroup(num_labels, temp_id, temp_time*ms)
 
     """ =================== Connections =================== """
     e_syn_model = liquid_syn()
@@ -243,7 +234,7 @@ def liquid_state_machine(size, precision, defaultclock, trial_no, path, quiet):
         e_syn_model.modify_model('parameters', 80*mV, key='weight')
         e_syn_model.modify_model('model', 'gtot1_post', old_expr='gtot0_post')
         # changing original parameters to make simulations similar
-        e_syn_model.modify_model('parameters', '7*ms', key='tau_syn')
+        #e_syn_model.modify_model('parameters', '7*ms', key='tau_syn')
     thl_conns = create_synapses(input_spikes, cells, e_syn_model)
 
     e_syn_model = liquid_syn()
@@ -260,7 +251,7 @@ def liquid_state_machine(size, precision, defaultclock, trial_no, path, quiet):
         e_syn_model.modify_model('model', 'gtot2_post', old_expr='gtot0_post')
         e_syn_model.modify_model('parameters', 20*mV, key='weight')
         # changing original parameters to make simulations similar
-        e_syn_model.modify_model('parameters', '7*ms', key='tau_syn')
+        #e_syn_model.modify_model('parameters', '7*ms', key='tau_syn')
     exc_exc = create_synapses(exc_cells, exc_cells, e_syn_model)
 
     e_syn_model.modify_model(
@@ -286,7 +277,7 @@ def liquid_state_machine(size, precision, defaultclock, trial_no, path, quiet):
         i_syn_model.modify_model('parameters', 100*mV, key='weight')
         i_syn_model.modify_model('model', 'gtot3_post', old_expr='gtot0_post')
         # changing original parameters to make simulations similar
-        i_syn_model.modify_model('parameters', '7*ms', key='tau_syn')
+        #i_syn_model.modify_model('parameters', '7*ms', key='tau_syn')
     inh_inh = create_synapses(inh_cells, inh_cells, i_syn_model)
 
     i_syn_model.modify_model(
@@ -303,7 +294,6 @@ def liquid_state_machine(size, precision, defaultclock, trial_no, path, quiet):
     e_syn_model.modify_model('on_post', '', old_expr='i_trace = 0')
     e_syn_model.modify_model('on_pre', 'g_syn += w_plast',
                              old_expr='g += w_plast')
-    e_syn_model.modify_model('parameters', 0.02*mV, key='w_plast')
 
     # to test weight decay
     #asdf = 0.995
@@ -315,21 +305,23 @@ def liquid_state_machine(size, precision, defaultclock, trial_no, path, quiet):
     #    old_expr= 'w_plast = clip(w_plast - eta*j_trace, 0*volt, w_max)')
 
     # only if hSTDP is used
-    #e_syn_model.modify_model('namespace', 100*mV, key='w_lim')
+    #e_syn_model.modify_model('namespace', 35*mV, key='w_lim')
+    #e_syn_model.modify_model('namespace', 35*mV, key='w_max')
     #e_syn_model.modify_model('model', '',
     #    old_expr='outgoing_weights_pre = w_plast : volt (summed)')
     #e_syn_model.modify_model('model', '',
     #    old_expr='outgoing_factor = outgoing_weights_pre - w_lim : volt')
     #e_syn_model.modify_model('model', '',
     #    old_expr='+ int(outgoing_factor > 0*volt)*outgoing_factor ')
+    #e_syn_model.modify_model('namespace', .001, key='h_eta')
 
     # TODO learning rate should be paired with normalization or hSTDP
-    e_syn_model.modify_model('namespace', .01*mV, key='eta')
+    e_syn_model.modify_model('namespace', .05*mV, key='eta')
 
     # TODO do i need this? I DONT think so
-    #e_syn_model.modify_model('parameters',
-    #                         '20*rand()*ms',
-    #                         key='delay')
+    e_syn_model.modify_model('parameters',
+                             '20*rand()*ms',
+                             key='delay')
 
     e_syn_model.model += 'inc_w_post = w_plast : volt (summed)\n'
     norm_factor = 1
@@ -350,25 +342,46 @@ def liquid_state_machine(size, precision, defaultclock, trial_no, path, quiet):
     e_syn_model.parameters = {**e_syn_model.parameters,
                               **{'alpha_syn_syn': 'tau_syn_syn/(dt + tau_syn_syn)'}}
     del e_syn_model.parameters['alpha_syn']
-    e_syn_model.modify_model('connection', .1, key='p')
+    #e_syn_model.modify_model('connection', .1, key='p')
+    conn_mat = np.random.choice([0, 1],
+                                size=(exc_cells.N, readout.N),
+                                p=[0.75, 0.25])
+    sources, targets = conn_mat.nonzero()
+    e_syn_model.modify_model('connection', sources, key='i')
+    e_syn_model.modify_model('connection', targets, key='j')
 
     # for emulating sleep
-    #e_syn_model.on_post += 'w_plast -= int(Iconst_post>0*pA)*int(Ca_post>1)*w_plast*.05\n'
-    #e_syn_model.modify_model(
-    #    'on_pre',
-    #    'w_plast = clip(w_plast - int(Iconst_post==0*pA)*eta*j_trace, 0*volt, w_max)',
-    #    old_expr='w_plast = clip(w_plast - eta*j_trace, 0*volt, w_max)')
-    #e_syn_model.modify_model(
-    #    'on_post',
-    #    'w_plast = clip(w_plast + int(Iconst_post==0*pA)*eta*i_trace, 0*volt, w_max)\n',
-    #    old_expr='w_plast = clip(w_plast + eta*i_trace, 0*volt, w_max)\n')
+    e_syn_model.on_post += 'w_plast -= int(Iconst_post>0*pA)*int(Ca_post>1)*w_plast*.05\n'
+    e_syn_model.modify_model(
+        'on_pre',
+        'w_plast = clip(w_plast - int(Iconst_post==0*pA)*eta*j_trace, 0*volt, w_max)',
+        old_expr='w_plast = clip(w_plast - eta*j_trace, 0*volt, w_max)')
+    e_syn_model.modify_model(
+        'on_post',
+        'w_plast = clip(w_plast + int(Iconst_post==0*pA)*eta*i_trace, 0*volt, w_max)\n',
+        old_expr='w_plast = clip(w_plast + eta*i_trace, 0*volt, w_max)\n')
 
-    e_syn_model.modify_model('parameters', '30*mV + 10*randn()*mV', key='w_plast')
+    #e_syn_model.print_model()
+    e_syn_model.modify_model('parameters', 'clip(1 + .1*randn(), 0, inf)*mV', key='w_plast')
     exc_readout = create_synapses(exc_cells, readout, e_syn_model,
                                   name='exc_readout')
     # only if hSTDP is used
     #exc_readout.run_regularly('w_plast = clip(w_plast - h_eta*heterosyn_factor, 0*volt, w_max)',
     #                           dt=1*ms)
+
+    # For WTA
+    #e_syn_model = CUBA()
+    #e_syn_model.modify_model('parameters', 50*mV, key='weight')
+    #readout_inhreadout = create_synapses(readout, inhreadout, e_syn_model, name='readout_inhreadout')
+    #i_syn_model = iSTDP()
+    #i_syn_model.modify_model('on_pre', 'i_trace += 1', old_expr='i_trace = 1')
+    #i_syn_model.modify_model('on_pre', '', old_expr='j_trace = 0')
+    #i_syn_model.modify_model('on_post', 'j_trace += 1', old_expr='j_trace = 1')
+    #i_syn_model.modify_model('on_post', '', old_expr='i_trace = 0')
+    #i_syn_model.modify_model('namespace', 0.4, key='target_rate')
+    #i_syn_model.modify_model('namespace', .01*mV, key='eta')
+    #i_syn_model.modify_model('model', 'gtot4_post', old_expr='gtot0_post')
+    #inhreadout_readout = create_synapses(inhreadout, readout, i_syn_model, name='inhreadout_readout')
 
     i_syn_model = CUBA()
     i_syn_model.modify_model('on_pre', 'g_syn += weight',
@@ -415,19 +428,6 @@ def liquid_state_machine(size, precision, defaultclock, trial_no, path, quiet):
     label_readout = create_synapses(teach_signal, readout, e_syn_model,
                                     name='label_readout')
 
-    # This for an artificial WTA
-    #e_syn_model = CUBA()
-    #e_syn_model.modify_model('model', 'dg_syn/dt = alpha_syn*g_syn',
-    #                         old_expr='dg/dt = alpha_syn*g')
-    #e_syn_model.modify_model('model', 'gtot2_post = g_syn*w_factor',
-    #                         old_expr='gtot0_post = g*w_factor')
-    #e_syn_model.modify_model('on_pre', 'g_syn += weight',
-    #                         old_expr='g += weight')
-    #e_syn_model.modify_model('connection', 'i', key='j')
-    #e_syn_model.modify_model('parameters', -20*mV, key='weight')
-    #antilabel_readout = create_synapses(antiteach_signal, readout, e_syn_model,
-    #                                    name='antilabel_readout')
-
     """ =================== Results =================== """
     selected_exc_cells = np.random.choice(Ne, 4, replace=False)
     selected_inh_cells = np.random.choice(Ni, 4, replace=False)
@@ -437,7 +437,7 @@ def liquid_state_machine(size, precision, defaultclock, trial_no, path, quiet):
                 'dt': str(defaultclock.dt),
                 'trial_no': trial_no,
                 'duration': str(sim_dur)}
-    with open(path+'metadata.json', 'w') as f:
+    with open(save_path+'metadata.json', 'w') as f:
         json.dump(Metadata, f)
 
     spkmon_e = SpikeMonitor(exc_cells)
@@ -453,6 +453,12 @@ def liquid_state_machine(size, precision, defaultclock, trial_no, path, quiet):
                             record=selected_inh_cells)
     sttmon_ro = StateMonitor(readout, variables=['Vm', 'Iconst', 'Vthr'],
                              record=[x for x in range(num_labels)])
+    sttmon_w = StateMonitor(exc_readout, variables='w_plast',
+                            record=[x for x in range(len(sources))])
+    sttmon_itrace = StateMonitor(exc_readout, variables='i_trace',
+                            record=[x for x in range(len(sources))])
+    sttmon_jtrace = StateMonitor(exc_readout, variables='j_trace',
+                            record=[x for x in range(len(sources))])
 
     kernel = kernels.GaussianKernel(sigma=30*q.ms)
     print('Running simulation')
@@ -462,8 +468,10 @@ def liquid_state_machine(size, precision, defaultclock, trial_no, path, quiet):
     # works. 60 for small net
     # e_syn_model.modify_model('parameters', 60, key='weight')
 
-    # this for just weight decay
-    #readout.namespace['tau_thr'] = 30000*ms
+    # TODO this for just weight decay and intrinsic plasticity
+    readout.namespace['tau_thr'] = 120000*ms
+    readout.namespace['thr_inc'] = 0.01*mV
+    #readout.Vthr = 1*mV
 
     # if iSTDP is used
     #inh_readout.namespace['eta'] = 0*mV
@@ -479,7 +487,7 @@ def liquid_state_machine(size, precision, defaultclock, trial_no, path, quiet):
     #exc_readout.w_plast = '145*(w_plast/inc_w_post*mV)'
 
     run(sim_dur-test_t)
-    device.build()
+    device.build(code_path)
 
     # TODO not used anymore. Idea was to count spikes instead of convolve by exp
     ## Process data for measuring accuracy
@@ -531,13 +539,13 @@ def liquid_state_machine(size, precision, defaultclock, trial_no, path, quiet):
                                               kernel=kernel)
     pop_avg_rates = np.mean(pop_rates, axis=1)
 
-    np.savez(f'{path}/exc_raster.npz',
+    np.savez(f'{save_path}/exc_raster.npz',
              times=spkmon_e.t/ms,
              indices=spkmon_e.i)
-    np.savez(f'{path}/inh_raster.npz',
+    np.savez(f'{save_path}/inh_raster.npz',
              times=spkmon_i.t/ms,
              indices=spkmon_i.i)
-    np.savez(f'{path}/rates.npz',
+    np.savez(f'{save_path}/rates.npz',
              times=np.array(pop_rates.times),
              rates=np.array(pop_avg_rates))
 
@@ -546,7 +554,7 @@ def liquid_state_machine(size, precision, defaultclock, trial_no, path, quiet):
     #if precision=='fp64': test_v = sttmon_e.Vm[0]/mV/20
     #elif precision=='fp8': test_v = minifloat2decimal(sttmon_e.Vm[0])/480
     #test_memb = pd.DataFrame({'time_ms': test_time, 'norm_Vm': test_v})
-    #feather.write_dataframe(test_memb, f'{path}/test_memb.feather')
+    #feather.write_dataframe(test_memb, f'{save_path}/test_memb.feather')
 
     if not quiet:
         fig,  (ax0, ax1, ax2, ax3) = plt.subplots(4, 1, sharex=True)
@@ -590,7 +598,7 @@ def liquid_state_machine(size, precision, defaultclock, trial_no, path, quiet):
         output_spikes = pd.DataFrame(
             {'time_ms': np.array(spkmon_ro.t/defaultclock.dt),
              'id': np.array(spkmon_ro.i)})
-        feather.write_dataframe(output_spikes, f'{path}/output_spikes.feather')
+        feather.write_dataframe(output_spikes, f'{save_path}/output_spikes.feather')
 
         temp_time, temp_Vm, temp_Vthr, temp_id = [], [], [], []
         for idx in range(readout.N):
@@ -602,31 +610,31 @@ def liquid_state_machine(size, precision, defaultclock, trial_no, path, quiet):
                                       'Vm_mV': temp_Vm,
                                       'Vthr_mV': temp_Vthr,
                                       'id': temp_id})
-        feather.write_dataframe(output_traces, f'{path}/output_traces.feather')
+        feather.write_dataframe(output_traces, f'{save_path}/output_traces.feather')
 
         input_spikes = pd.DataFrame(
             {'time_ms': input_times/defaultclock.dt,
              'id': input_indices})
-        feather.write_dataframe(input_spikes, f'{path}/input_spikes.feather')
+        feather.write_dataframe(input_spikes, f'{save_path}/input_spikes.feather')
 
         rec_spikes = pd.DataFrame(
             {'time_ms': np.array(spkmon_e.t/defaultclock.dt),
              'id': np.array(spkmon_e.i)})
-        feather.write_dataframe(rec_spikes, f'{path}/rec_spikes.feather')
+        feather.write_dataframe(rec_spikes, f'{save_path}/rec_spikes.feather')
 
         pd_events = np.array([[ev[0], ev[1]/defaultclock.dt, ev[2]/defaultclock.dt] for ev in events])
         pd_events = pd.DataFrame(pd_events, columns=['label', 'tstart_ms', 'tstop_ms'])
-        feather.write_dataframe(pd_events, f'{path}/events_spikes.feather')
+        feather.write_dataframe(pd_events, f'{save_path}/events_spikes.feather')
 
         links = pd.DataFrame(
             {'i': np.concatenate((exc_exc.i, exc_inh.i, inh_inh.i+Ne, inh_exc.i+Ne)),
              'j': np.concatenate((exc_exc.j, exc_inh.j+Ne, inh_inh.j+Ne, inh_exc.j))
              })
-        feather.write_dataframe(links, f'{path}/links.feather')
+        feather.write_dataframe(links, f'{save_path}/links.feather')
         nodes = pd.DataFrame(
             {'neu_id': [x for x in range(Nt)],
              'type': ['exc' for _ in range(Ne)] + ['inh' for _ in range(Ne, Nt)]})
-        feather.write_dataframe(nodes, f'{path}/nodes.feather')
+        feather.write_dataframe(nodes, f'{save_path}/nodes.feather')
 
         # for emulating sleep
         #plt.figure()
@@ -634,4 +642,10 @@ def liquid_state_machine(size, precision, defaultclock, trial_no, path, quiet):
         #plt.figure()
         #plt.plot(sttmon_ro.Ca[1])
 
+        plt.figure()
+        brian_plot(sttmon_w[np.where(targets==0)[0]])
+        plt.figure()
+        brian_plot(sttmon_w[np.where(targets==1)[0]])
+
+        print(readout.incoming_weights)
         plt.show()
