@@ -39,16 +39,12 @@ save_path = args.save_path
 code_path = args.code_path
 quiet = args.quiet
 protocol = args.protocol
+w_in = args.w_in
+bg_freq = args.bg_freq
 
 size = args.size
 
-if protocol==1:
-    w_in = 50
-    bg_freq = 74
-elif protocol==2:
-    w_in = args.w_in
-    bg_freq = args.bg_freq
-else:
+if not protocol:
     raise UserWarning('A protocol must be chosen for P&D simulation')
 
 defaultclock.dt = 1*ms
@@ -83,5 +79,5 @@ elif sim=='PD':
         fp8_potjans_diesmann(protocol, bg_freq, w_in, defaultclock,
                          save_path, code_path)
     else:
-        fp8_potjans_diesmann(protocol, defaultclock=defaultclock,
-                             save_path=save_path, code_path=code_path)
+        fp8_potjans_diesmann(protocol, bg_freq, w_in, defaultclock,
+                             save_path, code_path)

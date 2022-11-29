@@ -26,12 +26,10 @@ from core.utils.misc import minifloat2decimal, decimal2minifloat
 
 
 def fp8_potjans_diesmann(protocol, bg_freq, w_in, defaultclock, save_path, code_path):
-    tsim = .010 #TODO 100 is better so smooth histograms; 60 for protocol 1
-    s = 1000 #TODO no seed
-    seed(s)
-    # TODO remove below and check if I need path on device.build
-    #save_path = '/scratch/jr22/pu6813/'
-    #code_name = f'code_{protocol}/'
+    if protocol == 1:
+        tsim = 60
+    elif protocol == 2:
+        tsim = 100
 
     """ =================== Parameters =================== """
     ###############################################################################
@@ -142,8 +140,9 @@ def fp8_potjans_diesmann(protocol, bg_freq, w_in, defaultclock, save_path, code_
     if protocol == 2:
         thal_con = []
         thal_input = []
+        # More rate was used (orginal was 120) to elicit comparable activity
         stimulus = TimedArray(np.tile([0 for _ in range(70)]
-                                      + [960] # TODO maybe not necessary? was 120
+                                      + [960]
                                       + [0 for _ in range(29)], tsim)*Hz,
                        dt=10.*ms)
         thal_input = PoissonGroup(n_layer[8], rates='stimulus(t)')
@@ -173,7 +172,7 @@ def fp8_potjans_diesmann(protocol, bg_freq, w_in, defaultclock, save_path, code_
 
     if protocol == 1:
         net.run(tsim*second, report='stdout')
-        device.build()
+        device.build(code_path)
     elif protocol == 2:
         net.add(thal_input, thal_con)
 
@@ -183,7 +182,7 @@ def fp8_potjans_diesmann(protocol, bg_freq, w_in, defaultclock, save_path, code_
                                           max(fp8_values)))
             thal_con[i].weight = sampled_var
         net.run(tsim*second, report='stdout')
-        device.build()
+        device.build(code_path)
     gc.collect()
 
     """ ==================== Plotting ==================== """
@@ -194,7 +193,7 @@ def fp8_potjans_diesmann(protocol, bg_freq, w_in, defaultclock, save_path, code_
     lname = ['L23e', 'L23i', 'L4e', 'L4i', 'L5e', 'L5i','L6e', 'L6i']
 
     # number of neurons by layer
-    n_layer = [0, 20683, 5834, 21915, 5479, 4850, 1065, 14395, 2948];
+    n_layer = [0] + n_layer[:-1]
     l_bins = np.cumsum(n_layer) # cumulative number of neurons by layer
 
     # graphs color codes: different colors for different layers
@@ -219,6 +218,7 @@ def fp8_potjans_diesmann(protocol, bg_freq, w_in, defaultclock, save_path, code_
     # creating a flag to identify cortical layers
     spk_neuron['layer'] = pd.cut(spk_neuron['i'], l_bins, labels=lname, right=False)
     data['layer'] = pd.cut(data['i'], l_bins, labels=lname, right=False)
+    feather.write_dataframe(spk_neuron, 'spikes.feather')
 
     # sampling data:
     psample = 0.025 # percentage of neurons by layer for the raster plot
