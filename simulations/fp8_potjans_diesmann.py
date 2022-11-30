@@ -219,7 +219,7 @@ def fp8_potjans_diesmann(protocol, bg_freq, w_in, defaultclock, save_path, code_
     # creating a flag to identify cortical layers
     spk_neuron['layer'] = pd.cut(spk_neuron['i'], l_bins, labels=lname, right=False)
     data['layer'] = pd.cut(data['i'], l_bins, labels=lname, right=False)
-    feather.write_dataframe(spk_neuron, 'spikes.feather')
+    feather.write_dataframe(spk_neuron, save_path + 'spikes.feather')
 
     # sampling data:
     psample = 0.025 # percentage of neurons by layer for the raster plot
