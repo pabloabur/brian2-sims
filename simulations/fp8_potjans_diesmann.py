@@ -28,9 +28,9 @@ from core.utils.misc import minifloat2decimal, decimal2minifloat
 
 def fp8_potjans_diesmann(protocol, bg_freq, w_in, defaultclock, save_path, code_path):
     if protocol == 1:
-        tsim = 1#TODO back to 60
+        tsim = 60
     elif protocol == 2:
-        tsim = 2#TODO back to 100
+        tsim = 100
 
     """ =================== Parameters =================== """
     ###############################################################################
