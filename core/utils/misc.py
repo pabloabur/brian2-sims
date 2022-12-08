@@ -74,17 +74,17 @@ def neuron_group_from_spikes(num_inputs, simulation_dt, duration,
 
     return neu_group
 
-def stochastic_decay(init_value, decay_numerator, rand_num_bits, _vectorisation_idx):
+def stochastic_decay(init_value, decay_numerator, _vectorisation_idx):
     """ This function implements an stochastic exponential decay suited
         for digitial hardware implementations. It is mathematically
-        described as V = int(V*tau/(tau + dt) + rand())
+        described as V = int(V*tau/(tau + dt) + rand()) when data types
+        have 4-bits.
     Args:
         init_value (list or numpy.array): Values to be decayed
         decay_numerator (int): Values that when divided by 256
             represents decay rate, that is tau/(tau + dt)
-        rand_num_bits (int): Number of bits of random number generator.
     """
-    rand_num_bits = int(rand_num_bits)
+    rand_num_bits = 4
     init_value_sign = np.sign(init_value)
     init_value =  np.abs(init_value.astype(int))
     lfsr = np.ceil(np.random.rand(len(init_value))*(2**rand_num_bits-1)).astype(int)
@@ -95,37 +95,40 @@ def stochastic_decay(init_value, decay_numerator, rand_num_bits, _vectorisation_
     new_val = (new_val*decay_numerator.astype(int)) >> 8
     new_val = new_val >> int(rand_num_bits)
     return new_val * init_value_sign
-stochastic_decay = Function(stochastic_decay, arg_units=[1, 1, 1],
+stochastic_decay = Function(stochastic_decay, arg_units=[1, 1],
                             return_unit=1, stateless=False,
                             auto_vectorise=True)
 cpp_code = '''
-int stochastic_decay(int init_value, int decay_numerator, int rand_num_bits, int _vectorisation_idx)
+int stochastic_decay(int init_value, int decay_numerator, int _vectorisation_idx)
 {
     int new_val;
-    int values;
+    int init_value_sign;
     int lfsr;
+    int values = 15;
+    int rand_num_bits = 4;
 
-    values = 0;
-    while(rand_num_bits!=0){
-        values *= 2;
-        --rand_num_bits;
-    }
-    values -= 1;
+    if (init_value < 0)
+        init_value_sign = -1;
+    else
+        init_value_sign = 1;
+    init_value = abs(init_value);
+
     lfsr = ceil(rand(_vectorisation_idx) * values);
     new_val = init_value<<rand_num_bits | lfsr;
     new_val = (new_val*decay_numerator) >> 8;
     new_val = new_val >> rand_num_bits;
-    return new_val;
+    return init_value_sign * new_val;
 }
 '''
 stochastic_decay.implementations.add_implementation('cpp', cpp_code,
     dependencies={'rand': DEFAULT_FUNCTIONS['rand'],
+                  'abs': DEFAULT_FUNCTIONS['abs'],
                   'ceil': DEFAULT_FUNCTIONS['ceil']})
 
 def deterministic_decay(init_value, decay_numerator):
     """ This function implements an exponential decay suited
         for digitial hardware implementations. It is mathematically
-        described as V = V*tau/(tau + dt))
+        described as V = V*tau/(tau + dt)) when data types have 8-bits.
     Args:
         init_value (list or numpy.array): Values to be decayed
         decay_numerator (int): Values that when divided by 256
@@ -136,7 +139,25 @@ def deterministic_decay(init_value, decay_numerator):
     new_val = (init_value*decay_numerator.astype(int)) >> 8
     return new_val * init_value_sign
 deterministic_decay = Function(deterministic_decay, arg_units=[1, 1],
-                            return_unit=1, stateless=False)
+                            return_unit=1)
+cpp_code = '''
+int deterministic_decay(int init_value, int decay_numerator)
+{
+    int new_val;
+    int init_value_sign;
+
+    if (init_value < 0)
+        init_value_sign = -1;
+    else
+        init_value_sign = 1;
+    init_value = abs(init_value);
+
+    new_val = (init_value*decay_numerator) >> 8;
+    return init_value_sign * new_val;
+}
+'''
+deterministic_decay.implementations.add_implementation('cpp', cpp_code,
+    dependencies={'abs': DEFAULT_FUNCTIONS['abs']})
 
 
 def extract_fields(bitstring):
