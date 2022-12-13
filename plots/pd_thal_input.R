@@ -5,7 +5,19 @@ library(dplyr)
 library(arrow)
 library(purrr)
 
-spikes <- read_feather('spikes.feather')
+args = commandArgs(trailingOnly=T)
+if (length(args)==0){
+    stop("Folder with data must be provided")
+}else{
+    folder = args[1]
+}
+
+wd = getwd()
+dir_list <- Sys.glob(file.path(wd, folder, "win*"))
+dir_list
+
+# TODO purrr all
+spikes <- read_feather(file.path(dir_list[2], 'spikes.feather'))
 
 tsim <- 60 # TODO needs adjusting for full simulations
 
