@@ -8,7 +8,7 @@ class int4LIF(BaseNeuron):
         self.model = '''
             dVm/dt = summed_decay / second : 1
             # In hardware a conversion to signed current to unsigned is necessary
-            summed_decay = clip(decay_term + gtot*int(not_refractory), Vrest, Vm_max) : integer
+            summed_decay = clip(decay_term + gtot*int(not_refractory), 0, Vm_max) : integer
             decay_term = normal_decay*int(not_refractory) + refrac_decay*int(not not_refractory) : integer
 
             normal_decay = clip(stochastic_decay(Vm, vm_decay_numerator), Vrest, Vm_max) : 1 (constant over dt)
@@ -44,7 +44,7 @@ class int4LIF(BaseNeuron):
             'Iconst': '0',
             'Vthr': 15,
             'vm_decay_numerator': 240,  # 240/256 ~ 0.9375
-            'refrac_decay_numerator': 128,  # ~ 0.5 TODO 154,  ~ 0.604?
+            'refrac_decay_numerator': 4,  # to approximate 1ms refractory period
             'syn_decay_numerator': 208,  # ~ 0.8125
             'Vm': '3',
             'g': '0',
