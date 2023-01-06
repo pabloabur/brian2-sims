@@ -843,10 +843,3 @@ bool fp8_smaller_than(int num1, int num2, int _vectorisation_idx){
 }
 """
 fp8_smaller_than.implementations.add_implementation('cpp', cpp_code)
-
-DEFAULT_FUNCTIONS.update({'stochastic_decay': stochastic_decay,
-                          'fp8_multiply': fp8_multiply,
-                          'fp8_add': fp8_add,
-                          'fp8_smaller_than': fp8_smaller_than,
-                          'deterministic_decay': deterministic_decay,
-                          'decimal2minifloat': decimal2minifloat})
