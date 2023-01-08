@@ -35,7 +35,7 @@ def replicate_sequence(num_channels, reference_indices, reference_times,
 
 def neuron_rate(spike_source, kernel_len, kernel_var, simulation_dt,
                 interval=None, smooth=False, trials=1):
-    """Computes firing rates of neurons in a SpikeMonitor.
+    """Computes firing rates of neurons in a SpikeMonitor. DEPRECATED
 
     Args:
         spike_source (brian2.SpikeMonitor): Source with spikes and times. It
