@@ -2,6 +2,7 @@ from brian2 import SpikeMonitor, StateMonitor, SpikeGeneratorGroup
 from brian2 import run, ms, mV, pF
 from brian2 import device
 from brian2 import TimedArray
+from brian2 import defaultclock
 
 from core.utils.misc import decimal2minifloat, minifloat2decimal
 
@@ -27,7 +28,6 @@ import neo
 import quantities as q
 from elephant import statistics, kernels
 from elephant.statistics import isi, cv
-from elephant.conversion import BinnedSpikeTrain
 
 from viziphant.statistics import plot_instantaneous_rates_colormesh
 from brian2tools import brian_plot, plot_state
@@ -36,7 +36,7 @@ import feather
 from sklearn.svm import LinearSVC
 
 
-def liquid_state_machine(size, precision, defaultclock, trial_no, save_path, code_path, quiet):
+def liquid_state_machine(args):
     # freezing noise
     #import random
     #random.seed(25)
@@ -44,12 +44,14 @@ def liquid_state_machine(size, precision, defaultclock, trial_no, save_path, cod
     #np.random.seed(25)
     #seed(25)
 
-    if precision == 'fp8':
+    if args.precision == 'fp8':
         liquid_neu = fp8LIF
         liquid_syn = fp8CUBA
-    elif precision == 'fp64':
+    elif args.precision == 'fp64':
         liquid_neu = LIF
         liquid_syn = CUBA
+
+    defaultclock.dt = args.timestep * ms
 
     """ =================== Inputs =================== """
     item_rate = 128
@@ -115,7 +117,7 @@ def liquid_state_machine(size, precision, defaultclock, trial_no, save_path, cod
                                        input_times)
 
     """ =================== Neurons =================== """
-    Nt = size
+    Nt = args.size
     Ne, Ni = np.rint(Nt*.85).astype(int), np.rint(Nt*.15).astype(int)
     # In case rounding makes a difference
     Nt = Ne + Ni
@@ -130,7 +132,7 @@ def liquid_state_machine(size, precision, defaultclock, trial_no, save_path, cod
     #e_neu_model.modify_model('model', 'alpha*Vm + noise(t, i)', old_expr='alpha*Vm')
 
     e_neu_model.model += 'x : integer (constant)\ny : integer (constant)\nz : integer (constant)\n'
-    if precision == 'fp64':
+    if args.precision == 'fp64':
         e_neu_model.modify_model('model',
                                'gtot = gtot0 + gtot1 + gtot2 + gtot3',
                                old_expr='gtot = gtot0')
@@ -138,7 +140,7 @@ def liquid_state_machine(size, precision, defaultclock, trial_no, save_path, cod
         # TODO similar stuff makes them fire a lot; use it?
         # changing original parameters to make simulations similar
         #e_neu_model.modify_model('namespace', 150*pF, key='Cm')
-    if precision == 'fp8':
+    if args.precision == 'fp8':
         e_neu_model.modify_model('parameters',
                                  decimal2minifloat(.875),
                                  key='alpha_syn')
@@ -148,7 +150,7 @@ def liquid_state_machine(size, precision, defaultclock, trial_no, save_path, cod
     # TODO sleep cycles (check ~/test.py)
     sleep_time = events[sleep_iter][2]
     wake_time = events[sleep_iter+1][1]
-    if precision == 'fp64':
+    if args.precision == 'fp64':
         e_neu_model.modify_model(
             'model',
             'Iconst = 0*pA + 200*pA*int(t>sleep_time)*int(t<wake_time) : ampere',
@@ -226,11 +228,11 @@ def liquid_state_machine(size, precision, defaultclock, trial_no, save_path, cod
     """ =================== Connections =================== """
     e_syn_model = liquid_syn()
     e_syn_model.modify_model('connection', .12, key='p')
-    if precision == 'fp8':
+    if args.precision == 'fp8':
         e_syn_model.modify_model('parameters',
                                  decimal2minifloat(96),
                                  key='weight')
-    if precision == 'fp64':
+    if args.precision == 'fp64':
         e_syn_model.modify_model('parameters', 80*mV, key='weight')
         e_syn_model.modify_model('model', 'gtot1_post', old_expr='gtot0_post')
         # changing original parameters to make simulations similar
@@ -243,11 +245,11 @@ def liquid_state_machine(size, precision, defaultclock, trial_no, save_path, cod
         '.3 * exp(-((x_pre-x_post)**2 + (y_pre-y_post)**2 + (z_pre-z_post)**2) / 2**2)',
         key='p')
     e_syn_model.modify_model('parameters', '20*rand()*ms', key='delay')
-    if precision == 'fp8':
+    if args.precision == 'fp8':
         e_syn_model.modify_model('parameters',
                                  decimal2minifloat(24),
                                  key='weight')
-    elif precision == 'fp64':
+    elif args.precision == 'fp64':
         e_syn_model.modify_model('model', 'gtot2_post', old_expr='gtot0_post')
         e_syn_model.modify_model('parameters', 20*mV, key='weight')
         # changing original parameters to make simulations similar
@@ -265,14 +267,14 @@ def liquid_state_machine(size, precision, defaultclock, trial_no, save_path, cod
         'connection',
         '.1 * exp(-((x_pre-x_post)**2 + (y_pre-y_post)**2 + (z_pre-z_post)**2) / 2**2)',
         key='p')
-    if precision == 'fp8':
+    if args.precision == 'fp8':
         i_syn_model.modify_model('namespace',
                                  decimal2minifloat(-1),
                                  key='w_factor')
         i_syn_model.modify_model('parameters',
                                  decimal2minifloat(120),
                                  key='weight')
-    if precision == 'fp64':
+    if args.precision == 'fp64':
         i_syn_model.modify_model('namespace', -1, key='w_factor')
         i_syn_model.modify_model('parameters', 100*mV, key='weight')
         i_syn_model.modify_model('model', 'gtot3_post', old_expr='gtot0_post')
@@ -343,6 +345,7 @@ def liquid_state_machine(size, precision, defaultclock, trial_no, save_path, cod
                               **{'alpha_syn_syn': 'tau_syn_syn/(dt + tau_syn_syn)'}}
     del e_syn_model.parameters['alpha_syn']
     #e_syn_model.modify_model('connection', .1, key='p')
+    # TODO get from function
     conn_mat = np.random.choice([0, 1],
                                 size=(exc_cells.N, readout.N),
                                 p=[0.75, 0.25])
@@ -435,9 +438,9 @@ def liquid_state_machine(size, precision, defaultclock, trial_no, save_path, cod
     Metadata = {'selected_exc_cells': selected_exc_cells.tolist(),
                 'selected_inh_cells': selected_inh_cells.tolist(),
                 'dt': str(defaultclock.dt),
-                'trial_no': trial_no,
+                'args.trial': args.trial,
                 'duration': str(sim_dur)}
-    with open(save_path+'metadata.json', 'w') as f:
+    with open(args.save_path+'metadata.json', 'w') as f:
         json.dump(Metadata, f)
 
     spkmon_e = SpikeMonitor(exc_cells)
@@ -487,22 +490,8 @@ def liquid_state_machine(size, precision, defaultclock, trial_no, save_path, cod
     #exc_readout.w_plast = '145*(w_plast/inc_w_post*mV)'
 
     run(sim_dur-test_t)
-    device.build(code_path)
-
-    # TODO not used anymore. Idea was to count spikes instead of convolve by exp
-    ## Process data for measuring accuracy
-    #neo_spks = []
-    #for spk_trains in spkmon_e.spike_trains().values():
-    #    neo_spks.append(neo.SpikeTrain(spk_trains/ms*q.ms,
-    #                                   t_stop=sim_dur/ms*q.ms))
-    #data = BinnedSpikeTrain(neo_spks, bin_size=8*q.ms)
-    #samples = []
-    #for lt in events:
-    #    # Not casting like below results in error!
-    #    ti = np.around(lt[1]/ms).astype(int)*q.ms
-    #    tf = np.around(lt[2]/ms).astype(int)*q.ms
-    #    temp_data = data.time_slice(ti, tf).to_array()
-    #    samples.append(temp_data.flatten())
+    # TODO only if backend is cpp
+    device.build(args.code_path)
 
     liquid_states = []
     sim_times = np.arange(0, sim_dur/ms+1, defaultclock.dt/ms)
@@ -528,7 +517,7 @@ def liquid_state_machine(size, precision, defaultclock, trial_no, save_path, cod
     lr.fit(samples[:, :train_size].T, [x[0] for x in events][:train_size])
     acc = lr.score(samples[:, train_size:].T, [x[0] for x in events][train_size:])
     print(f'Accuracy was {acc}')
-    with open(f'size_{size}-FP_{precision}-trial_{trial_no}.txt', 'w') as f:
+    with open(f'size_{args.size}-FP_{args.precision}-trial_{args.trial}.txt', 'w') as f:
         f.write(f'{acc:.2f}')
 
     temp_trains = spkmon_e.spike_trains()
@@ -539,24 +528,24 @@ def liquid_state_machine(size, precision, defaultclock, trial_no, save_path, cod
                                               kernel=kernel)
     pop_avg_rates = np.mean(pop_rates, axis=1)
 
-    np.savez(f'{save_path}/exc_raster.npz',
+    np.savez(f'{args.save_path}/exc_raster.npz',
              times=spkmon_e.t/ms,
              indices=spkmon_e.i)
-    np.savez(f'{save_path}/inh_raster.npz',
+    np.savez(f'{args.save_path}/inh_raster.npz',
              times=spkmon_i.t/ms,
              indices=spkmon_i.i)
-    np.savez(f'{save_path}/rates.npz',
+    np.savez(f'{args.save_path}/rates.npz',
              times=np.array(pop_rates.times),
              rates=np.array(pop_avg_rates))
 
     # TODO remove it. Just wanted to compare membrane
     #test_time = sttmon_e.t/defaultclock.dt
-    #if precision=='fp64': test_v = sttmon_e.Vm[0]/mV/20
-    #elif precision=='fp8': test_v = minifloat2decimal(sttmon_e.Vm[0])/480
+    #if args.precision=='fp64': test_v = sttmon_e.Vm[0]/mV/20
+    #elif args.precision=='fp8': test_v = minifloat2decimal(sttmon_e.Vm[0])/480
     #test_memb = pd.DataFrame({'time_ms': test_time, 'norm_Vm': test_v})
-    #feather.write_dataframe(test_memb, f'{save_path}/test_memb.feather')
+    #feather.write_dataframe(test_memb, f'{args.save_path}/test_memb.feather')
 
-    if not quiet:
+    if not args.quiet:
         fig,  (ax0, ax1, ax2, ax3) = plt.subplots(4, 1, sharex=True)
         for i in range(readout.N):
             plot_state(sttmon_ro.t, sttmon_ro.Vm[i], var_unit=mV, axes=ax0)
@@ -598,7 +587,7 @@ def liquid_state_machine(size, precision, defaultclock, trial_no, save_path, cod
         output_spikes = pd.DataFrame(
             {'time_ms': np.array(spkmon_ro.t/defaultclock.dt),
              'id': np.array(spkmon_ro.i)})
-        feather.write_dataframe(output_spikes, f'{save_path}/output_spikes.feather')
+        feather.write_dataframe(output_spikes, f'{args.save_path}/output_spikes.feather')
 
         temp_time, temp_Vm, temp_Vthr, temp_id = [], [], [], []
         for idx in range(readout.N):
@@ -610,31 +599,31 @@ def liquid_state_machine(size, precision, defaultclock, trial_no, save_path, cod
                                       'Vm_mV': temp_Vm,
                                       'Vthr_mV': temp_Vthr,
                                       'id': temp_id})
-        feather.write_dataframe(output_traces, f'{save_path}/output_traces.feather')
+        feather.write_dataframe(output_traces, f'{args.save_path}/output_traces.feather')
 
         input_spikes = pd.DataFrame(
             {'time_ms': input_times/defaultclock.dt,
              'id': input_indices})
-        feather.write_dataframe(input_spikes, f'{save_path}/input_spikes.feather')
+        feather.write_dataframe(input_spikes, f'{args.save_path}/input_spikes.feather')
 
         rec_spikes = pd.DataFrame(
             {'time_ms': np.array(spkmon_e.t/defaultclock.dt),
              'id': np.array(spkmon_e.i)})
-        feather.write_dataframe(rec_spikes, f'{save_path}/rec_spikes.feather')
+        feather.write_dataframe(rec_spikes, f'{args.save_path}/rec_spikes.feather')
 
         pd_events = np.array([[ev[0], ev[1]/defaultclock.dt, ev[2]/defaultclock.dt] for ev in events])
         pd_events = pd.DataFrame(pd_events, columns=['label', 'tstart_ms', 'tstop_ms'])
-        feather.write_dataframe(pd_events, f'{save_path}/events_spikes.feather')
+        feather.write_dataframe(pd_events, f'{args.save_path}/events_spikes.feather')
 
         links = pd.DataFrame(
             {'i': np.concatenate((exc_exc.i, exc_inh.i, inh_inh.i+Ne, inh_exc.i+Ne)),
              'j': np.concatenate((exc_exc.j, exc_inh.j+Ne, inh_inh.j+Ne, inh_exc.j))
              })
-        feather.write_dataframe(links, f'{save_path}/links.feather')
+        feather.write_dataframe(links, f'{args.save_path}/links.feather')
         nodes = pd.DataFrame(
             {'neu_id': [x for x in range(Nt)],
              'type': ['exc' for _ in range(Ne)] + ['inh' for _ in range(Ne, Nt)]})
-        feather.write_dataframe(nodes, f'{save_path}/nodes.feather')
+        feather.write_dataframe(nodes, f'{args.save_path}/nodes.feather')
 
         # for emulating sleep
         #plt.figure()
