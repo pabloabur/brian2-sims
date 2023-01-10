@@ -1,6 +1,7 @@
 from simulations.liquid_state_machine import liquid_state_machine
 from simulations.fp8_potjans_diesmann import fp8_potjans_diesmann
 from simulations.neuron_synapse_models import neuron_synapse_models
+from simulations.SLIF_balanced_tutorial import balanced_network
 
 import os
 from datetime import datetime
@@ -60,6 +61,11 @@ subparser_pd.set_defaults(func=fp8_potjans_diesmann)
 
 subparser_models = subparsers.add_parser('models')
 subparser_models.set_defaults(func=neuron_synapse_models)
+
+subparser_balance = subparsers.add_parser('balance')
+subparser_balance.add_argument('--w_in', type=float,
+                               help=f'Relative strength of weights.')
+subparser_balance.set_defaults(func=balanced_network)
 
 args = parser.parse_args()
 
