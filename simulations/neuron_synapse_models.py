@@ -218,7 +218,8 @@ def neuron_synapse_models(args):
                                 dat[1][trial].time_slice(
                                     stim_rate_intervals[i]*q.ms,
                                     stim_rate_intervals[i+1]*q.ms),
-                                window=[-10, 10])
+                                window=[-10, 10],
+                                cross_correlation_coefficient=True)
                 avg_cch.append(cch.magnitude.flatten())
             avg_cch = np.mean(avg_cch, axis=0)
             temp_cch.extend(avg_cch)
