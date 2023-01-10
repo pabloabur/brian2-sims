@@ -68,11 +68,11 @@ def monitor2binnedneo(monitor, time_interval, bin_size):
 
     return BinnedSpikeTrain(neo_spks, bin_size=bin_size*q.ms)
 
-def neurons_rate(monitor, duration):
+def neurons_rate(monitor, duration, sigma=200):
     spk_trains = monitor.spike_trains()
     spk_trains = [neo.SpikeTrain(spk_trains[x]/ms, t_stop=duration, units='ms')
                   for x in spk_trains]
-    kernel = kernels.GaussianKernel(sigma=200*q.ms)
+    kernel = kernels.GaussianKernel(sigma=sigma*q.ms)
     rates = instantaneous_rate(spk_trains,
                                sampling_period=1*q.ms,
                                kernel=kernel)
