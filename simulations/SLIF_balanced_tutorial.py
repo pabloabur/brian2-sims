@@ -5,6 +5,7 @@ from brian2 import second, Hz, ms, ohm, mA, mV, Network
 
 from core.utils.misc import minifloat2decimal, decimal2minifloat
 from core.utils.prepare_models import generate_connection_indices
+from core.utils.process_responses import neurons_rate
 
 from core.parameters.orca_params import ConnectionDescriptor, PopulationDescriptor
 
@@ -50,6 +51,8 @@ def balanced_network(args):
     poisson_spikes = PoissonGroup(285, rates=6*Hz)
 
     """ ==================== Models ==================== """
+    # TODO double check recurrent weight strength
+    # TODO double check input is not too much
     Ne, Ni = 3471, 613
 
     neurons, exc_neurons, inh_neurons = [], [], []
@@ -79,6 +82,14 @@ def balanced_network(args):
                                                     neu,
                                                     aux_model,
                                                     name=name))
+        if name=='fp64_thal':
+            thalamus_connections[-1].weight = 23.5*mV
+        elif name=='int4_thal':
+            thalamus_connections[-1].weight = 1
+        elif name=='int8_thal':
+            thalamus_connections[-1].weight = 16
+        elif name=='fp8_thal':
+            thalamus_connections[-1].weight = 97
 
     intra_exc, intra_inh = [], []
     models = zip([CUBA, int4CUBA, int8CUBA, fp8CUBA],
@@ -117,17 +128,19 @@ def balanced_network(args):
         intra_inh.append(create_synapses(i_neu, neu, aux_model, name=name+'_i'))
 
     """ ==================== Monitors ==================== """
-    rng = np.random.default_rng(12345)
+    rng = np.random.default_rng()
     selected_exc_cells = rng.choice(Ne, 4, replace=False)
     selected_inh_cells = rng.choice(Ni, 4, replace=False)
 
-    spkmon_e = [SpikeMonitor(x) for x in exc_neurons]
-    spkmon_i = [SpikeMonitor(x) for x in inh_neurons]
+    spkmon_e = [SpikeMonitor(x, name=x.name+'_e_spkmon') for x in exc_neurons]
+    spkmon_i = [SpikeMonitor(x, name=x.name+'_i_spkmon') for x in inh_neurons]
     sttmon_e = [StateMonitor(x, variables='Vm',
-                             record=selected_exc_cells)
+                             record=selected_exc_cells,
+                             name=x.name+'_e_sttmon')
                     for x in exc_neurons]
     sttmon_i = [StateMonitor(x, variables='Vm',
-                             record=selected_inh_cells)
+                             record=selected_inh_cells,
+                             name=x.name+'_i_sttmon')
                     for x in inh_neurons]
 
     """ ==================== running/processing ==================== """
@@ -136,46 +149,32 @@ def balanced_network(args):
     net.add(neurons, exc_neurons, inh_neurons, thalamus_connections, intra_exc,
             intra_inh, poisson_spikes, spkmon_e, spkmon_i, sttmon_e, sttmon_i)
     net.run(duration*ms)
+    if args.backend == 'cpp_standalone':
+        device.build(args.code_path)
 
-    temp_trains = spkmon_e.spike_trains()
-    spk_trains = [neo.SpikeTrain(temp_trains[x]/ms, t_stop=duration, units='ms')
-                  for x in temp_trains]
-    kernel = kernels.GaussianKernel(sigma=30*q.ms)
-    pop_rates = statistics.instantaneous_rate(spk_trains,
-                                              sampling_period=1*q.ms,
-                                              kernel=kernel)
-    pop_avg_rates = np.mean(pop_rates, axis=1)
+    population_rates = [neurons_rate(x, duration, sigma=100) for x in spkmon_e]
+    pop_avg_rates = [np.mean(x, axis=1) for x in population_rates]
 
     """ ==================== saving results ==================== """
     Metadata = {'selected_exc_cells': selected_exc_cells.tolist(),
                 'selected_inh_cells': selected_inh_cells.tolist(),
                 'dt': str(defaultclock.dt),
-                'trial_no': trial_no,
+                'trial': args.trial,
                 'duration': str(duration*ms),
-                'inh_weight': i_syn_model.parameters['weight']}
-    with open(path+'metadata.json', 'w') as f:
+                'inh_weight': args.w_in}
+    with open(args.save_path + 'metadata.json', 'w') as f:
         json.dump(Metadata, f)
 
-    np.savez(f'{path}/exc_raster.npz',
-             times=spkmon_e.t/ms,
-             indices=spkmon_e.i)
-    np.savez(f'{path}/inh_raster.npz',
-             times=spkmon_i.t/ms,
-             indices=spkmon_i.i)
-    np.savez(f'{path}/rates.npz',
-             times=np.array(pop_rates.times),
-             rates=np.array(pop_avg_rates))
-
-    if not quiet:
+    if not args.quiet:
         fig, ax1 = plt.subplots()
         ax2 = ax1.twinx()
-        ax2.plot(pop_rates.times, pop_avg_rates, color='red')
+        ax2.plot(population_rates.times, pop_avg_rates, color='red')
         brian_plot(spkmon_e, marker=',', color='black', axes=ax1)
-        ax1.set_xlabel(f'time ({pop_rates.times.dimensionality.latex})')
+        ax1.set_xlabel(f'time ({population_rates.times.dimensionality.latex})')
         ax1.set_ylabel('neuron number')
-        ax2.set_ylabel(f'rate ({pop_rates.dimensionality})')
+        ax2.set_ylabel(f'rate ({population_rates.dimensionality})')
 
-        plot_instantaneous_rates_colormesh(pop_rates)
+        plot_instantaneous_rates_colormesh(population_rates)
         plt.title('Neuron rates on last trial')
 
         isi_neu = [isi(spks) for spks in spk_trains]
