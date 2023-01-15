@@ -63,8 +63,10 @@ subparser_models = subparsers.add_parser('models')
 subparser_models.set_defaults(func=neuron_synapse_models)
 
 subparser_balance = subparsers.add_parser('balance')
-subparser_balance.add_argument('--w_in', type=float,
-                               help=f'Relative strength of weights.')
+subparser_balance.add_argument('--w_perc', type=float,
+                               help=f'Relative strength of weights. In the '
+                                    f'case of minifloat, it represents '
+                                    f'decimal value.')
 subparser_balance.add_argument('--trial', type=int, default=0,
                                help='trial number')
 subparser_balance.set_defaults(func=balanced_network)
