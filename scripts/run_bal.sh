@@ -10,7 +10,7 @@
 #done
 folder_name="sim_data/balance_exp"
 for wi in $(seq -f "%.6f" .03125 0.03125 1); do
-    for trial in {0..9}; do
+    for trial in {0..4}; do
         sim_name=$(date +"${folder_name}/%d-%m_%Hh%Mm%Ss")
         python run_simulation.py --quiet --save_path $sim_name --backend cpp_standalone balance --w_perc $wi
     done

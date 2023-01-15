@@ -1,7 +1,7 @@
 from simulations.liquid_state_machine import liquid_state_machine
 from simulations.fp8_potjans_diesmann import fp8_potjans_diesmann
 from simulations.neuron_synapse_models import neuron_synapse_models
-from simulations.SLIF_balanced_tutorial import balanced_network
+from simulations.balanced_network import balanced_network
 
 import os
 from datetime import datetime
