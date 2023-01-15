@@ -44,7 +44,7 @@ class int4LIF(BaseNeuron):
             'Iconst': '0',
             'Vthr': 15,
             'vm_decay_numerator': 240,  # 240/256 ~ 0.9375
-            'refrac_decay_numerator': 4,  # to approximate 1ms refractory period
+            'refrac_decay_numerator': 4,  # to approximate 2ms refractory period
             'syn_decay_numerator': 213,  # ~ 0.832
             'Vm': '3',
             'g': '0',
