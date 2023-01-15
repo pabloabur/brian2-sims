@@ -7,18 +7,26 @@ import unittest
 import numpy as np
 
 from brian2 import SpikeGeneratorGroup, run, ms, defaultclock, prefs, \
-    StateMonitor, set_device, device
+    StateMonitor, set_device, device, DEFAULT_FUNCTIONS
 
 from brian2tools import brian_plot
 
 from core.equations.neurons.fp8LIF import fp8LIF
 from core.equations.synapses.fp8CUBA import fp8CUBA
 from core.builder.groups_builder import create_synapses, create_neurons
-from core.utils.misc import DEFAULT_FUNCTIONS
 from core.equations.base_equation import ParamDict
+from core.utils.misc import minifloat2decimal, decimal2minifloat
 
-#prefs.codegen.target = "numpy"
-set_device('cpp_standalone')
+from core.utils.misc import stochastic_decay, fp8_multiply, fp8_add,\
+    fp8_smaller_than, deterministic_decay
+DEFAULT_FUNCTIONS.update({'stochastic_decay': stochastic_decay,
+                          'fp8_multiply': fp8_multiply,
+                          'fp8_add': fp8_add,
+                          'fp8_smaller_than': fp8_smaller_than,
+                          'deterministic_decay': deterministic_decay})
+
+prefs.codegen.target = "numpy"
+#set_device('cpp_standalone')
 
 class TestOrca(unittest.TestCase):
 
@@ -86,6 +94,34 @@ class TestOrca(unittest.TestCase):
         for i in range(len(res)):
             self.assertEqual(res[i], gn[i], f'{ws[i]}*{w0[i]} should be '
                                             f'{gn[i]}, but was {res[i]}')
+
+    def test_conversions(self):
+        self.assertEqual(minifloat2decimal(55), 0.9375, 'failed to convert int')
+
+        self.assertEqual(minifloat2decimal(127.0), 480, 'failed to convert float')
+
+        list_res = minifloat2decimal([56, 97.0])
+        list_ref = [1, 36]
+        for res, ref in zip(list_res, list_ref):
+            self.assertEqual(res, ref, 'failed to convert list')
+
+        list_res = minifloat2decimal(np.array([58.1, 66]))
+        list_ref = [1.25, 2.5]
+        for res, ref in zip(list_res, list_ref):
+            self.assertEqual(res, ref, 'failed to convert np.ndarray')
+
+        self.assertEqual(decimal2minifloat(.01367188), 7, 'failed to round subnormal float')
+        self.assertEqual(decimal2minifloat([.0039]), 2, 'failed to round subnormal list')
+        self.assertEqual(decimal2minifloat([-500, 490]), [255, 127], 'failed to deal with extremes')
+
+        # Negative zero (128 in minifloat) is not used and therefore not tested
+        integer_values = [x for x in range(128)]
+        integer_results = decimal2minifloat(minifloat2decimal(integer_values))
+        self.assertEqual(integer_results, integer_values, 'failed to convert positive range')
+
+        integer_values = [x for x in range(129, 255)]
+        integer_results = decimal2minifloat(minifloat2decimal(integer_values))
+        self.assertEqual(integer_results, integer_values, 'failed to convert negative range')
 
 if __name__ == '__main__':
     unittest.main(verbosity=2, exit=False)

@@ -3,6 +3,8 @@ from brian2 import implementation, check_units, ms, declare_types,\
         DEFAULT_FUNCTIONS
 import numpy as np
 import os
+from warnings import warn
+from bisect import bisect_left
 current_dir = os.path.abspath(os.path.dirname(__file__))
 
 # Parameters for 8-bit floating point implementation
@@ -211,87 +213,137 @@ def get_leading_zeros(bitstring):
 
     return leading_zeros
 
-def decimal2minifloat(decimal):
+def decimal2minifloat(decimal_value, bitwise_logic=False, raise_warning=True):
     """ Converts a representable decimal value to 8-bit floating point.
         Use it with CAUTION as it does not check if decimal provided is
         actually supported in the implemented format.
+        TODO fix bug; converting 7 and below fails
 
     Args:
-        decimal (float): decimal value to be converted
+        decimal_value (int, float, list or numpy.array): decimal value to be
+            converted
+        bitwise_logic (boolean): DEPRECATED. It is maintained here just for
+            reference, although some errors are still present e.g. it fails
+            to convert 0.0019. Indicates whether bitwise logic should be used
+            to convert decimal
     Returns:
-        flot_repr (ndarray): floating point representation of decimal.
+        (list or int): minifloat representation of decimal.
     """
-    if decimal == 0:
-        return 0
+    if bitwise_logic:
+        if decimal_value == 0:
+            return 0
 
-    sign = 0 if decimal >= 0 else 1
-    decimal_abs = np.abs(decimal)
-    int_part = int(str(decimal_abs).split('.')[0])
-    frac_part = decimal_abs - int_part
-    
-    int_bits = []
-    remainder = int_part
-    while remainder != 0:
-        int_bits.append(int(remainder % 2))
-        remainder = int(remainder / 2)
-    # For convenience order is switched, that is MSB is in LSB position
+        sign = 0 if decimal_value >= 0 else 1
+        # TODO str includes square brackets
+        # TODO try plot_fp8 as well
+        decimal_abs = np.abs(decimal_value)
+        int_part = int(str(decimal_abs).split('.')[0])
+        frac_part = decimal_abs - int_part
+        
+        int_bits = []
+        remainder = int_part
+        while remainder != 0:
+            int_bits.append(int(remainder % 2))
+            remainder = int(remainder / 2)
+        # For convenience order is switched, that is MSB is in LSB position
 
-    frac_bits = []
-    remainder = frac_part
-    while remainder != 0:
-        frac_bits.append(int(remainder * 2))
-        remainder = remainder*2 - int(remainder * 2)
+        frac_bits = []
+        remainder = frac_part
+        while remainder != 0:
+            frac_bits.append(int(remainder * 2))
+            remainder = remainder*2 - int(remainder * 2)
 
-    normal_bit_position = 0
-    if not int_bits:
-        while True:
-            if frac_bits[normal_bit_position] == 1:
+        normal_bit_position = 0
+        if not int_bits:
+            while True:
+                if frac_bits[normal_bit_position] == 1:
+                    normal_bit_position += 1
+                    break
                 normal_bit_position += 1
-                break
-            normal_bit_position += 1
-        if normal_bit_position > np.abs(EMIN-BIAS+1):
-            normal_bit_position = np.abs(EMIN-BIAS+1)
-        normal_bit = frac_bits[normal_bit_position - 1]
-        # Note that slicing out of bounds values does not return anything
-        upper_limit = normal_bit_position + FRAC_WIDTH
-        while upper_limit>len(frac_bits):
-            upper_limit -= 1
-        frac_part = frac_bits[normal_bit_position:upper_limit]
-        frac_part.reverse()
-        while len(frac_part) < FRAC_WIDTH:
-            frac_part = [0] + frac_part
-        exp = -normal_bit_position
+            if normal_bit_position > np.abs(EMIN-BIAS+1):
+                normal_bit_position = np.abs(EMIN-BIAS+1)
+            normal_bit = frac_bits[normal_bit_position - 1]
+            # Note that slicing out of bounds values does not return anything
+            upper_limit = normal_bit_position + FRAC_WIDTH
+            while upper_limit>len(frac_bits):
+                upper_limit -= 1
+            frac_part = frac_bits[normal_bit_position:upper_limit]
+            frac_part.reverse()
+            while len(frac_part) < FRAC_WIDTH:
+                frac_part = [0] + frac_part
+            exp = -normal_bit_position
+        else:
+            normal_bit = int_bits[-1]
+            normal_bit_position = len(int_bits) - 1
+            if normal_bit_position > EMAX-BIAS:
+                normal_bit_position = EMAX-BIAS
+            exp = normal_bit_position
+
+            frac_bits = frac_bits[::-1] + int_bits[:-1]
+            lower_limit = len(frac_bits) - FRAC_WIDTH
+            if lower_limit < 0:
+                for _ in range(np.abs(lower_limit)):
+                    frac_bits = [0] + frac_bits
+                    lower_limit += 1
+            frac_part = frac_bits[lower_limit:]
+
+        exp += (BIAS-1)
+        exp += normal_bit
+
+        cumm_frac = 0
+        for idx in range(FRAC_WIDTH):
+            cumm_frac += frac_part[idx]*2**idx
+
+        minifloat_repr = ((sign << EXP_WIDTH+FRAC_WIDTH)
+                          + (exp << FRAC_WIDTH)
+                          + cumm_frac)
+        if minifloat2decimal(minifloat_repr) != decimal_value:
+            print(f'WARNING: Check {decimal_value} provided. Returning '
+                  f'{minifloat2decimal(minifloat_repr)}')
     else:
-        normal_bit = int_bits[-1]
-        normal_bit_position = len(int_bits) - 1
-        if normal_bit_position > EMAX-BIAS:
-            normal_bit_position = EMAX-BIAS
-        exp = normal_bit_position
+        minifloats = [x for x in range(256)]
+        decimals = minifloat2decimal(minifloats).tolist()
+        # In python 0==-0. We want to avoid these two to be a single key below
+        decimals[128] = '-0'
+        minifloat_map = dict(zip(decimals, minifloats))
 
-        frac_bits = frac_bits[::-1] + int_bits[:-1]
-        lower_limit = len(frac_bits) - FRAC_WIDTH
-        if lower_limit < 0:
-            for _ in range(np.abs(lower_limit)):
-                frac_bits = [0] + frac_bits
-                lower_limit += 1
-        frac_part = frac_bits[lower_limit:]
+        if isinstance(decimal_value, int) or isinstance(decimal_value, float):
+            decimal_value = np.array([decimal_value])
+        else:
+            decimal_value = np.array(decimal_value)
 
-    exp += (BIAS-1)
-    exp += normal_bit
+        non_matching = [x for x in decimal_value if x not in minifloat_map]
 
-    cumm_frac = 0
-    for idx in range(FRAC_WIDTH):
-        cumm_frac += frac_part[idx]*2**idx
+        if non_matching:
+            if raise_warning:
+                warn(f'WARNING: Values {non_matching} are not representable. '
+                     f'Returning nearest representation. You can ignore this '
+                     f'warning by setting raise_warning=False')
+            aux_decimals = sorted([x for x in minifloat_map.keys() if x!='-0'])
+            aux_decimals = np.array(aux_decimals)
+            ideal_position = list(map(lambda x: bisect_left(aux_decimals, x),
+                                      non_matching))
+            ideal_position = np.clip(ideal_position, 0, len(aux_decimals) - 1)
 
-    minifloat_repr = ((sign << EXP_WIDTH+FRAC_WIDTH)
-                      + (exp << FRAC_WIDTH)
-                      + cumm_frac)
-    if minifloat2decimal(minifloat_repr) != decimal:
-        print(f'WARNING: Check {decimal} provided. Returning '
-              f'{minifloat2decimal(minifloat_repr)}')
+            previous_ind = np.clip(ideal_position - 1, 0, len(aux_decimals) - 1)
+            previous_values = aux_decimals[previous_ind]
+            next_ind = ideal_position
+            next_values = aux_decimals[next_ind]
 
-    return minifloat_repr
-decimal2minifloat = Function(decimal2minifloat, arg_units=[1], return_unit=1)
+            rounded_values = np.where(
+                (np.abs(next_values-non_matching)
+                 < np.abs(non_matching-previous_values)),
+                next_values, previous_values)
+
+            non_matching_id = np.array([i for i, x in enumerate(decimal_value)
+                                            if x not in minifloat_map])
+            decimal_value[non_matching_id] = rounded_values
+
+    if len(decimal_value)==1:
+        minifloat_representation = [minifloat_map[x] for x in decimal_value][0]
+    else:
+        minifloat_representation = [minifloat_map[x] for x in decimal_value]
+    return minifloat_representation
 
 
 def minifloat2decimal(bitstring):
@@ -299,13 +351,16 @@ def minifloat2decimal(bitstring):
         full-precision (according to python) representation.
 
     Args:
-        bitstring (int, float, list or numpy.array): Binary word.
+        bitstring (int, float, list or numpy.array): Binary word. In case of
+        a floating point number, fractional part is discarded with int casting.
     Returns:
         float: Converted value in decimal.
     """
-    if (isinstance(bitstring, int) or isinstance(bitstring, float)
-            or isinstance(bitstring, list)):
+    if isinstance(bitstring, int) or isinstance(bitstring, float):
         bitstring = np.array([bitstring])
+    else:
+        bitstring = np.array(bitstring)
+
     bitstring = bitstring.astype(int)
     val_sign, val_exponent, val_abs, val_normal = extract_fields(bitstring)
     e0 = val_exponent - val_normal - BIAS + 1

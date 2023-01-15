@@ -401,17 +401,11 @@ def expand_state_variables(model, initial_name, source_group):
     return model
 
 def plot_fp8():
-    dec_vals = []
     int_vals = [x for x in range(256)]
-    for int_val in int_vals:
-        int_val = np.array([int_val])
-        dec_vals.append(minifloat2decimal(int_val))
+    dec_vals = minifloat2decimal(int_vals)
 
-    # Quickly test values. For simplicity, set -0, that is 128, to 0
+    # For simplicity, set -0, that is 128, to 0
     int_vals[128] = 0
-    for dec_val, int_val in zip(dec_vals, int_vals):
-        assert decimal2minifloat(dec_val[0]) == int_val, dec_val
-
     dec_vals.sort()
     plt.plot(dec_vals, np.zeros_like(dec_vals), '|')
     plt.show()
