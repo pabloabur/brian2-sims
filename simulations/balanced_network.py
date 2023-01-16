@@ -253,15 +253,15 @@ def balanced_network(args):
                 'trial': args.trial,
                 'duration': str(duration*ms),
                 'inh_perc': args.w_perc}
-    with open(args.save_path + 'metadata.json', 'w') as f:
+    with open(args.save_path + '/metadata.json', 'w') as f:
         json.dump(Metadata, f)
 
     # Prepares to save final mean inhibitory weight for each case
     resolution = ['fp64', 'int4', 'int8', 'fp8']
     for res in resolution:
         if res=='fp8':
-            inhibitory_weight[res+'_syn'] = decimal2minifloat(
-                inhibitory_weight[res+'_syn'])
+            inhibitory_weight[res+'_syn'] = minifloat2decimal(
+                    decimal2minifloat(inhibitory_weight[res+'_syn']))[0]
         elif res=='int8':
             inhibitory_weight[res+'_syn'] = np.rint(
                 inhibitory_weight[res+'_syn'])
@@ -273,7 +273,7 @@ def balanced_network(args):
         'inhibitory_weight': list(inhibitory_weight.values()),
         'resolution': resolution,
         'frequency_Hz': [np.mean(x.magnitude) for x in pop_avg_rates]})
-    feather.write_dataframe(avg_rates, args.save_path + 'avg_rates.feather')
+    feather.write_dataframe(avg_rates, args.save_path + '/avg_rates.feather')
 
     voltages = pd.DataFrame({
         'values': np.hstack((sttmon_e[0].Vm[2]/(20*mV),
@@ -281,7 +281,7 @@ def balanced_network(args):
         'time_ms': np.hstack((sttmon_e[0].t, sttmon_e[3].t)),
         'resolution': (['fp64' for _ in range(len(sttmon_e[0].t))]
                        + ['fp8' for _ in range(len(sttmon_e[3].t))])})
-    feather.write_dataframe(voltages, args.save_path + 'voltages.feather')
+    feather.write_dataframe(voltages, args.save_path + '/voltages.feather')
 
     weights = pd.DataFrame({
         'values': np.hstack((intra_inh[0].weight/mV,
@@ -292,7 +292,7 @@ def balanced_network(args):
                        + ['int4' for _ in range(len(intra_inh[1].weight))]
                        + ['int8' for _ in range(len(intra_inh[2].weight))]
                        + ['fp8' for _ in range(len(intra_inh[3].weight))])})
-    feather.write_dataframe(weights, args.save_path + 'weights.feather')
+    feather.write_dataframe(weights, args.save_path + '/weights.feather')
 
     if not args.quiet:
         plt.plot(pop_avg_rates[0], label='fp64')

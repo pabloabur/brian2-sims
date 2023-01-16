@@ -2,36 +2,64 @@ library(purrr)
 library(arrow)
 library(ggplot2)
 library(dplyr)
+library(patchwork)
+library(wesanderson)
 
 args = commandArgs(trailingOnly=T)
 if (length(args)==0){
     stop("Folder with data folders must be provided")
 }else{
     folder = args[1]
+    save_path <- args[2]  # with name and extension
 }
 
 wd = getwd()
-dir_list <- Sys.glob(file.path(wd, folder, '2023*'))
+dir_list <- Sys.glob(file.path(wd, folder, '*/'))
 
 vm <- map(file.path(dir_list, 'voltages.feather'), read_feather)
 rates <- map(file.path(dir_list, 'avg_rates.feather'), read_feather)
 weights <- map(file.path(dir_list, 'weights.feather'), read_feather)
 
+sim_names <- map_chr(str_split(dir_list, '\\/'), ~nth(., -2))
+vm <- set_names(vm, sim_names)
+weights <- set_names(weights, sim_names)
+
+color_map <- wes_palette('Moonrise1')
+
 rates <- reduce(rates, full_join)
-p1 <- rates %>%
-    ggplot(aes(x=inhibitory_weight, y=frequency_Hz)) +
-    geom_point() + geom_smooth(span=0.8) + facet_wrap(vars(resolution), scales='free')
+rates_stats <- rates %>%
+    group_by(inhibitory_weight, resolution) %>%
+    summarise(mean_freq=mean(frequency_Hz), sd_freq=sd(frequency_Hz))
+p1 <- rates_stats %>%
+    ggplot(aes(x=inhibitory_weight, y=mean_freq)) +
+    geom_point(color=color_map[[4]]) +
+    geom_errorbar(aes(ymin=mean_freq-sd_freq, ymax=mean_freq+sd_freq)) +
+    geom_line() +
+    facet_wrap(vars(resolution), scales='free') +
+    theme_bw() +
+    labs(x='mean inhibitory weight (a.u.)', y='frequency (Hz)')
 
 # Chosen for convenience
-p2 <- ggplot(vm[[2]], aes(x=time_ms, y=values, color=resolution)) +
-    geom_line() + xlim(0, 0.1) + ylim(-4, 1)
+p2 <- ggplot(vm$'16-01_11h23m35s', aes(x=time_ms, y=values, color=resolution)) +
+    geom_line() + xlim(0, 0.1) + ylim(-1, 1) +
+    labs(x='time (ms)', y='Vm', color='Bit-precision') +
+    guides(color=guide_legend(override.aes=list(size=4))) +
+    theme_bw() + scale_color_manual(values=color_map[c(2, 4)])
 
-p3 <- ggplot(weights[[2]], aes(values)) +
-    geom_histogram() + facet_wrap(vars(resolution), scales='free')
+p3 <- weights$'16-01_11h23m35s' %>%
+    slice_sample(n=1000) %>%
+    ggplot(aes(values)) +
+    geom_histogram(fill=color_map[[4]]) +
+    facet_wrap(vars(resolution), scales='free') + 
+    theme_bw() + labs(x='inhibitory weights (a.u.)')
 
 p4 <- weights[[3]] %>%
     slice_sample(n=1000) %>%
     ggplot() +
     geom_qq(aes(sample=values)) + stat_qq_line(aes(sample=values)) +
-    facet_wrap(vars(resolution), scales='free')
-# TODO fig fp8 qqline for high and low variance
+    facet_wrap(vars(resolution), scales='free') + 
+    theme_bw()
+
+fig <- (p1 / p2 / p3 / p4) + plot_annotation(tag_levels='A')
+fig
+ggsave(save_path, fig)
