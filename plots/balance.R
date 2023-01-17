@@ -1,4 +1,5 @@
 library(purrr)
+library(stringr)
 library(arrow)
 library(ggplot2)
 library(dplyr)
@@ -22,6 +23,7 @@ weights <- map(file.path(dir_list, 'weights.feather'), read_feather)
 
 sim_names <- map_chr(str_split(dir_list, '\\/'), ~nth(., -2))
 vm <- set_names(vm, sim_names)
+separated_rates <- set_names(rates, sim_names)
 weights <- set_names(weights, sim_names)
 
 color_map <- wes_palette('Moonrise1')
@@ -39,27 +41,38 @@ p1 <- rates_stats %>%
     theme_bw() +
     labs(x='mean inhibitory weight (a.u.)', y='frequency (Hz)')
 
-# Chosen for convenience
+# Chosen for convenience a not so strong inhibition
 p2 <- ggplot(vm$'16-01_11h23m35s', aes(x=time_ms, y=values, color=resolution)) +
     geom_line() + xlim(0, 0.1) + ylim(-1, 1) +
-    labs(x='time (ms)', y='Vm', color='Bit-precision') +
+    labs(x='time (s)', y='Vm', color='Bit-precision') +
     guides(color=guide_legend(override.aes=list(size=4))) +
     theme_bw() + scale_color_manual(values=color_map[c(2, 4)])
 
-p3 <- weights$'16-01_11h23m35s' %>%
+# rate over time for normal under balanced state?
+weights$'17-01_12h50m07s' <- weights$'17-01_12h50m07s' %>%
+    filter(resolution=='fp64' | resolution=='fp8')
+weights$'17-01_12h50m07s'[weights$'17-01_12h50m07s'=='fp8'] = 'fp8, increased s.d.'
+weights$'16-01_11h41m10s' <- weights$'16-01_11h41m10s' %>%
+    filter(resolution=='fp8')
+selected_weights <- full_join(weights$'17-01_12h50m07s', weights$'16-01_11h41m10s')
+p3 <- selected_weights %>%
     slice_sample(n=1000) %>%
     ggplot(aes(values)) +
     geom_histogram(fill=color_map[[4]]) +
     facet_wrap(vars(resolution), scales='free') + 
     theme_bw() + labs(x='inhibitory weights (a.u.)')
 
-p4 <- weights[[3]] %>%
+p4 <- selected_weights  %>%
     slice_sample(n=1000) %>%
     ggplot() +
-    geom_qq(aes(sample=values)) + stat_qq_line(aes(sample=values)) +
-    facet_wrap(vars(resolution), scales='free') + 
+    geom_qq(aes(sample=values), color=color_map[[2]]) + stat_qq_line(aes(sample=values)) +
+    facet_wrap(vars(resolution), scales='free') +
+    labs(x='theoretical quantiles', y='sampled quantiles') +
     theme_bw()
 
-fig <- (p1 / p2 / p3 / p4) + plot_annotation(tag_levels='A')
-fig
-ggsave(save_path, fig)
+fig <- (p2 / p3 / p4) + plot_annotation(tag_levels='A')
+ggsave(str_replace(save_path, '.png', '1.png'), p1)
+ggsave(str_replace(save_path, '.png', '2.png'), fig)
+
+print('Average rate of a net running with uniform distribution:')
+print(separated_rates$'2023.01.17_15.40' %>% filter(resolution=='fp8'))
