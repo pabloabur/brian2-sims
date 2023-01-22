@@ -4,6 +4,9 @@ library(stringr)
 library(dplyr)
 library(arrow)
 library(purrr)
+library(jsonlite)
+library(wesanderson)
+library(plotly)
 
 args = commandArgs(trailingOnly=T)
 if (length(args)==0){
@@ -12,100 +15,48 @@ if (length(args)==0){
     folder = args[1]
 }
 
+color_map <- wes_palette('Moonrise2')
+
 wd = getwd()
-dir_list <- Sys.glob(file.path(wd, folder, "win*"))
-dir_list
+dir <- Sys.glob(file.path(wd, folder))
 
-# TODO purrr all
-spikes <- read_feather(file.path(dir_list[2], 'spikes.feather'))
+spikes <- read_feather(file.path(dir, "spikes.feather"))
+metadata <- fromJSON(file.path(dir, "metadata.json"))
 
-tsim <- 60 # TODO needs adjusting for full simulations
+tsim <- as.double(str_sub(metadata$duration, 1, -2))
 
-# Raster plot, protocol 1; somethig like .4s duration
-min_time <- 59600
-max_time <- tsim*1000
+# Units considered in ms. Input comes around 700ms after each trial
+trials <- seq(tsim)
+min_time <- trials[1]*1000 - 330
+max_time <- trials[1]*1000 - 270
 p_sample <- 0.025
 df_raster <- spikes %>%
     group_by(layer) %>%
     slice_sample(prop=p_sample) %>%
     unnest_longer(t) %>%
     mutate(laminae=str_sub(layer, 1, -2)) %>%
-    # In case we want to change order
-    #mutate(laminae=fct_relevel(laminae, c("L4", "L23", "L5", "L6"))) %>%
-    filter(t>=min_time & t<=max_time)
+    mutate(type=if_else(str_sub(layer, -1, -1)=='e', 'Exc', 'Inh')) #%>%
+    #filter(t>=min_time & t<=max_time)
 
-# Raster plot, protocol 2; interval can be selected
-min_time <- 600
-max_time <- 1000
-df_raster2 <- spikes %>%
-    group_by(layer) %>%
-    slice_sample(prop=p_sample) %>%
-    unnest_longer(t) %>%
-    mutate(laminae=str_sub(layer, 1, -2)) %>%
-    filter(t>=min_time & t<=max_time)
+raster <- ggplot(df_raster, aes(x=t, y=i, color=type)) +
+         geom_point(shape=20, size=1) + theme_bw() +
+         theme(panel.grid.minor=element_blank(),
+               panel.grid.major=element_blank(),
+               axis.text.y=element_blank(),
+               axis.ticks.y=element_blank()) +
+         guides(color=guide_legend(override.aes=list(size=5))) +
+         facet_grid(rows=vars(laminae), scales="free") +
+         labs(x='time (ms)', y=element_blank())
 
-# TODO colored by exc/inh for each layer
-# TODO remove ylabel, ticks, and adjust xlabel (size and name and in s)
-spks <- ggplot(df_raster, aes(x=t, y=i, color=layer)) +
-         geom_point() + theme_bw() +
-         theme(panel.grid.minor=element_blank(), panel.grid.major=element_blank()) +
-         facet_grid(rows=vars(laminae), scales="free")
+histograms <- df_raster %>%
+    mutate(t=t%%1000) %>%
+    ggplot(aes(x=t, color=type)) + geom_step(stat='bin', bins=50) +
+    facet_grid(rows=vars(laminae), scales='free') + theme_bw() +
+    scale_color_manual(values=color_map) +
+    labs(x='time (ms)') + xlim(670, 730)
 
-# Measures
-n_sample <- 1000
-df_measures <- spikes %>%
-    group_by(layer) %>%
-    slice_sample(n=n_sample)
-
-rates <- df_measures %>%
-    rowwise() %>%
-    mutate(rate=length(t)/tsim)
-
-# R uses unbiased estimation, so result will be slightly different from numpy
-cv <- df_measures %>%
-    mutate(isi=map(t, diff))%>%
-    rowwise()%>%
-    mutate(cv=sd(isi, na.rm=T)/mean(isi, na.rm=T))
-
-hist_bins <- seq(0, tsim*1000+3, by=3)
-sync_var <- df_measures %>%
-    unnest_longer(t) %>%
-    # Removing initial transients
-    filter(t>=500) %>%
-    group_by(layer) %>%
-    summarise(sync_var=var(hist(t, hist_bins, plot=F, right=F)$counts))
-sync_mean <- df_measures %>%
-    unnest_longer(t) %>%
-    # Removing initial transients
-    filter(t>=500) %>%
-    group_by(layer) %>%
-    summarise(sync_mean=mean(hist(t, hist_bins, plot=F, right=F)$counts, na.rm=T))
-syncs <- full_join(sync_mean, sync_var, by="layer") %>%
-    rowwise() %>%
-    mutate(sync=sync_var/sync_mean)
-
-# AI landscape
-# TODO AIness taken from multiple folders
-# sys glob *.feather; files <- map(files, read_feather); map(gh_repos, ~map_dbl(.x, ~.x[["size"]])) %>% map(~max(.x))
-avg_rates <- rates %>%
-    group_by(layer) %>%
-    summarise(rate=mean(rate, na.rm=T))
-avg_cv <- cv %>%
-    group_by(layer) %>%
-    summarise(cv=mean(cv, na.rm=T))
-df_measures <- reduce(list(avg_rates, avg_cv, select(syncs, layer, sync)), left_join, by="layer")
-df_measures <- df_measures %>%
-    mutate(ai=if_else(rate<30 & sync<=8 & cv>=0.7 & cv<=1.2, T, F))
-ainess = 100*sum(df_measures$ai)/8.0
-
-# TODO Styles for plots here
-freq <- ggplot(rates, aes(rate, layer)) +
-    geom_boxplot()
-irregularity <- ggplot(df_measures, aes(cv, layer)) +
-    geom_col()
-synchronicity <- ggplot(df_measures, aes(sync, layer)) +
-    geom_col()
-#ggsave('test.png', freq)
-
-# TODO protocol2; np.sum(np.split(count, tsim), axis=0) for each layer; the rest is similar
-hist_bins2 <- seq(0, tsim*1000+.5, by=.5)
+histograms
+dev.new()
+raster
+tr<-read_feather(file.path(dir, 'traces.feather'))
+ggplotly(ggplot(tr, aes(x=t, y=v)) + geom_line())
