@@ -10,6 +10,8 @@ library(dplyr)
 library(purrr)
 library(forcats)
 
+library(wesanderson)
+
 args = commandArgs(trailingOnly=T)
 if (length(args)==0){
     stop("Folder with data folders must be provided")
@@ -30,41 +32,44 @@ tsim <- map_dbl(metadata_list, ~as.double(str_sub(.$duration, 1, -2)))
 n_sample <- 1000
 df_measures <- set_names(spikes_list, sim_names)
 df_measures <- df_measures %>%
-    map(~.x %>% group_by(layer) %>% slice_sample(n=n_sample))
+    map(group_by, layer) %>%
+    map(slice_sample, n=n_sample)
 
 rates <- map2(df_measures, tsim, ~mutate(.x, rate=map_int(t, length)/.y))
 avg_rates <- rates %>%
-    map(~.x %>% group_by(layer) %>% summarise(rate=mean(rate, na.rm=T)))
+    map(group_by, layer) %>%
+    map(summarise, rate=mean(rate, na.rm=T))
     
 
 # R uses unbiased estimation, so result will be slightly different from numpy
 cv <- df_measures %>%
-    map(~.x %>% mutate(isi=map(t, diff))) %>%
-    map(~.x %>% rowwise() %>% mutate(cv=sd(isi, na.rm=T)/mean(isi, na.rm=T)))
+    map(mutate, isi=map(t, diff)) %>%
+    map(mutate, cv=map_dbl(isi, sd, na.rm=T)/map_dbl(isi, mean, na.rm=T)) %>%
+    map(filter, !is.na(cv))
 avg_cv <- cv %>%
-    map(~.x %>% group_by(layer) %>% summarise(cv=mean(cv, na.rm=T)))
+    map(group_by, layer) %>%
+    map(summarise, cv=mean(cv, na.rm=T))
 
 hist_bins <- map(tsim, ~seq(0, .*1000+3, by=3))
 # For some reason there is an error if I name df_measures but not hist_bins
 hist_bins <- set_names(hist_bins, sim_names)
 syncs <- df_measures %>%
+    map(unnest_longer, t) %>%
+     # Removing initial transients
+    map(filter, t>=500) %>%
     imap(~.x %>%
-         unnest_longer(t) %>%
-         # Removing initial transients
-         filter(t>=500) %>%
-         group_by(layer) %>%
-         summarise(sync_var=var(hist(t, hist_bins[[.y]], plot=F, right=F)$counts),
-                   sync_mean=mean(hist(t, hist_bins[[.y]], plot=F, right=F)$counts, na.rm=T)) %>%
-         rowwise() %>%
-         mutate(sync=sync_var/sync_mean)
-        )
-syncs <- syncs %>% map(~.x %>% select(layer, sync))
+         summarise(sync_var=var(hist(t, hist_bins[[.y]], plot=F, right=F)$counts, na.rm=T),
+                   sync_mean=mean(hist(t, hist_bins[[.y]], plot=F, right=F)$counts, na.rm=T))
+    ) %>%
+    map(mutate, sync=sync_var/sync_mean)
+syncs <- syncs %>%
+    map(select, layer, sync)
 
 df_measures <- list(avg_rates, avg_cv, syncs) %>%
-    pmap(~reduce(list(..1, ..2, ..3), left_join, by="layer"))
+    pmap(~reduce(list(..1, ..2, ..3), left_join, by="layer")) %>%
+    map(filter, !is.na(cv))
 df_measures <- df_measures %>%
-    map(~.x %>%
-        mutate(ai=if_else(rate<30 & sync<=8 & cv>=0.7 & cv<=1.2, T, F)))
+    map(mutate, ai=if_else(rate<30 & sync<=8 & cv>=0.7 & cv<=1.2, T, F))
     
 ainess <- map_dbl(df_measures, ~100*sum(.$ai)/8)
 ainess <- data.frame(ratio=ainess) %>%
@@ -84,9 +89,10 @@ weak_act <- data.frame(sim_type=empty_dirs) %>%
 ainess <- full_join(ainess, weak_act)
 # contour plot was ignoring max value, so it is multiplied so that everyone is in range
 fig <- ggplot(ainess, aes(x=win, y=bg, z=ratio/100)) +
-    geom_contour_filled(breaks=c(seq(0, 1, .15), 1.05)) +
-    scale_x_continuous(limits=c(66, 82), expand=c(0, 0)) +
-    scale_y_continuous(limits=c(10, 70), expand=c(0, 0)) +
-    scale_fill_manual(values=viridisLite::inferno(11),
-                      guide=guide_colorsteps(title="%"))
+    geom_contour_filled() +
+    scale_x_continuous(expand=c(0, 0)) +
+    scale_y_continuous(expand=c(0, 0)) +
+    scale_fill_manual(values=wes_palette('Zissou1', 8, type='continuous'),
+                      name='AI %') +
+    labs(x='inhibitory weight (a.u)', y='background rate (Hz)')
 ggsave(file.path(wd, folder, 'fig.png'), fig)
