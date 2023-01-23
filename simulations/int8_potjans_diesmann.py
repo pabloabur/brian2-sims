@@ -15,16 +15,16 @@ import json
 import gc
 from datetime import datetime
 
-from core.equations.neurons.fp8LIF import fp8LIF
-from core.equations.synapses.fp8CUBA import fp8CUBA
+from core.equations.neurons.int8LIF import int8LIF
+from core.equations.synapses.int8CUBA import int8CUBA
 from core.builder.groups_builder import create_synapses, create_neurons
 from core.utils.misc import minifloat2decimal, decimal2minifloat
 from core.utils.prepare_models import generate_connection_indices
 
 
-def fp8_potjans_diesmann(args):
+def int8_potjans_diesmann(args):
     if args.protocol == 1:
-        tsim = 60
+        tsim = 2
     elif args.protocol == 2:
         tsim = 100
     else:
@@ -57,17 +57,17 @@ def fp8_potjans_diesmann(args):
                    [0.016,  0.007, 0.021, 0.017, 0.057, 0.020,  0.040, 0.225,  0.0512],
                    [0.036,  0.001, 0.003, 0.001, 0.028, 0.008,  0.066, 0.144,  0.0196]])
 
-    w_ex = 1.25
-    w_ex_2 = 2.5
+    w_ex = 2
+    w_ex_2 = 4
     delay_ex = 1.5
     delay_in = .8
 
     """ =============== Neuron definitions =============== """
-    neu_model = fp8LIF()
-    neu_model.modify_model('parameters', '43', key='alpha_syn')
+    neu_model = int8LIF()
+    neu_model.modify_model('parameters', '85', key='syn_decay_numerator')
     neurons = create_neurons(N, neu_model)
-    sampled_var = np.clip(rng.normal(448, 10, N), 0, 480)
-    neurons.Vm = decimal2minifloat(sampled_var, raise_warning=False)
+    sampled_var = np.clip(rng.normal(106, 10, N), 51, 255)
+    neurons.Vm = np.rint(sampled_var)
 
     """ ==================== Networks ==================== """
     bg_layer = array([1600, 1500 ,2100, 1900, 2000, 1900, 2900, 2100])
@@ -93,7 +93,7 @@ def fp8_potjans_diesmann(args):
             if nsyn<1:
                 pass
             else:
-                syn_model = fp8CUBA()
+                syn_model = int8CUBA()
                 syn_model.modify_model('connection', pre_index, key='i')
                 syn_model.modify_model('connection', post_index, key='j')
                 con.append(create_synapses(pop[c], pop[r], syn_model))
@@ -105,17 +105,15 @@ def fp8_potjans_diesmann(args):
                                                          w_ex_2/10,
                                                          nsyn),
                                               0,
-                                              480)
-                        con[-1].weight = decimal2minifloat(sampled_var,
-                                                           raise_warning=False)
+                                              127)
+                        con[-1].weight = np.rint(sampled_var)
                     else:
                         sampled_var = np.clip(rng.normal(w_ex,
                                                          w_ex/10,
                                                          nsyn),
                                               0,
-                                              480)
-                        con[-1].weight = decimal2minifloat(sampled_var,
-                                                           raise_warning=False)
+                                              127)
+                        con[-1].weight = np.rint(sampled_var)
 
                     sampled_var = np.clip(rng.normal(delay_ex,
                                                      delay_ex/2,
@@ -129,10 +127,9 @@ def fp8_potjans_diesmann(args):
                                                      args.w_in/10,
                                                      nsyn),
                                           0,
-                                          480)
-                    con[-1].weight = decimal2minifloat(sampled_var,
-                                                       raise_warning=False)
-                    con[-1].namespace['w_factor'] = 184  # -1 in decimal
+                                          128)
+                    con[-1].weight = np.rint(sampled_var)
+                    con[-1].namespace['w_factor'] = -1  # -1 in decimal
 
                     sampled_var = np.clip(rng.normal(delay_in,
                                                      delay_in/2,
@@ -142,7 +139,8 @@ def fp8_potjans_diesmann(args):
 
     bg_in  = []
     poisson_pop = []
-    syn_model = fp8CUBA()
+    syn_model = int8CUBA()
+    syn_model.modify_model('parameters', 16, key='weight')
     syn_model.connection['p'] = .03
     for r in range(0, 8):
         poisson_pop.append(PoissonGroup(bg_layer[r], rates=args.bg_freq*Hz))
@@ -153,14 +151,14 @@ def fp8_potjans_diesmann(args):
         thal_input = []
         # More rate was used (orginal was 120) to elicit comparable activity
         stimulus = TimedArray(np.tile([0 for _ in range(70)]
-                                      + [240]
+                                      + [960]
                                       + [0 for _ in range(29)], tsim)*Hz,
                        dt=10.*ms)
         thal_input = PoissonGroup(n_layer[8], rates='stimulus(t)')
         thal_nsyn = []
         for r in range(0, 8):
             sources, targets = generate_connection_indices(thal_input.N,
-                                                           pop[r].N,
+                                                           pop[r],
                                                            table[r][8])
             if not np.any(sources):
                 continue
@@ -174,6 +172,7 @@ def fp8_potjans_diesmann(args):
     ###########################################################################
     smon_net = SpikeMonitor(neurons)
 
+
     """ ==================== Running ===================== """
     net = Network(collect())
 
@@ -186,9 +185,8 @@ def fp8_potjans_diesmann(args):
         net.add(thal_input, thal_con)
 
         for i, nsyn in enumerate(thal_nsyn):
-            sampled_var = np.clip(rng.normal(10*w_ex_2, 10*w_ex_2/10, nsyn), 0, 480)
-            thal_con[i].weight = decimal2minifloat(sampled_var,
-                                                   raise_warning=False)
+            sampled_var = np.clip(rng.normal(w_ex_2, w_ex_2/10, nsyn), 0, 127)
+            thal_con[i].weight = np.rint(sampled_var)
         net.run(tsim*second, report='stdout')
         device.build(args.code_path)
     gc.collect()
@@ -217,8 +215,6 @@ def fp8_potjans_diesmann(args):
     feather.write_dataframe(spk_neuron, args.save_path + 'spikes.feather')
 
     Metadata = {'dt': str(defaultclock.dt),
-                'duration': str(tsim*second),
-                'mean_inh_w': str(args.w_in),
-                'background_rate': str(args.bg_freq)}
+                'duration': str(tsim*second)}
     with open(args.save_path + 'metadata.json', 'w') as f:
         json.dump(Metadata, f)
