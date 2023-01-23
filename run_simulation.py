@@ -27,7 +27,8 @@ parser.add_argument('--save_path', type=str,
                     default=f"""{datetime.now().strftime('%Y.%m.%d')}"""
                             f"""_{datetime.now().hour}."""
                             f"""{datetime.now().minute}/""",
-                    help='directory to save')
+                    help=f'directory to save, creating folder and overwriting '
+                         f'existing ones. Defaults to datetime name.')
 parser.add_argument('--code_path', type=str, default='./code/',
                     help='directory of compiled code')
 parser.add_argument('--quiet', action='store_true',
