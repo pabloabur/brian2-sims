@@ -490,8 +490,7 @@ def liquid_state_machine(args):
     #exc_readout.w_plast = '145*(w_plast/inc_w_post*mV)'
 
     run(sim_dur-test_t)
-    # TODO only if backend is cpp
-    device.build(args.code_path)
+    if args.backend == 'cpp_standalone': device.build(args.code_path)
 
     liquid_states = []
     sim_times = np.arange(0, sim_dur/ms+1, defaultclock.dt/ms)

@@ -182,7 +182,7 @@ def fp8_potjans_diesmann(args):
 
     if args.protocol == 1:
         net.run(tsim*second, report='stdout')
-        device.build(args.code_path)
+        if args.backend == 'cpp_standalone': device.build(args.code_path)
     elif args.protocol == 2:
         net.add(thal_input, thal_con)
 
@@ -191,7 +191,7 @@ def fp8_potjans_diesmann(args):
             thal_con[i].weight = decimal2minifloat(sampled_var,
                                                    raise_warning=False)
         net.run(tsim*second, report='stdout')
-        device.build(args.code_path)
+        if args.backend == 'cpp_standalone': device.build(args.code_path)
     gc.collect()
 
     """ ==================== Plotting ==================== """
