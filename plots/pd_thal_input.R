@@ -7,15 +7,17 @@ library(purrr)
 library(jsonlite)
 library(wesanderson)
 library(plotly)
+library(patchwork)
 
 args = commandArgs(trailingOnly=T)
 if (length(args)==0){
     stop("Folder with data must be provided")
 }else{
     folder = args[1]
+    save_path <- args[2]  # with name and extension
 }
 
-color_map <- wes_palette('Moonrise2')
+color_map <- wes_palette('Moonrise1')[c(4, 2)]
 
 wd = getwd()
 dir <- Sys.glob(file.path(wd, folder))
@@ -35,28 +37,29 @@ df_raster <- spikes %>%
     slice_sample(prop=p_sample) %>%
     unnest_longer(t) %>%
     mutate(laminae=str_sub(layer, 1, -2)) %>%
-    mutate(type=if_else(str_sub(layer, -1, -1)=='e', 'Exc', 'Inh')) #%>%
-    #filter(t>=min_time & t<=max_time)
+    mutate(type=if_else(str_sub(layer, -1, -1)=='e', 'Exc', 'Inh'))
 
-raster <- ggplot(df_raster, aes(x=t, y=i, color=type)) +
+raster <- df_raster %>%
+         filter(t>=min_time & t<=max_time) %>%
+         ggplot(aes(x=t, y=i, color=type)) +
          geom_point(shape=20, size=1) + theme_bw() +
          theme(panel.grid.minor=element_blank(),
                panel.grid.major=element_blank(),
                axis.text.y=element_blank(),
                axis.ticks.y=element_blank()) +
          guides(color=guide_legend(override.aes=list(size=5))) +
+         scale_color_manual(values=color_map) +
          facet_grid(rows=vars(laminae), scales="free") +
          labs(x='time (ms)', y=element_blank())
 
 histograms <- df_raster %>%
     mutate(t=t%%1000) %>%
     ggplot(aes(x=t, color=type)) + geom_step(stat='bin', bins=50) +
+    guides(color=guide_legend(override.aes=list(size=4))) +
     facet_grid(rows=vars(laminae), scales='free') + theme_bw() +
+    theme(legend.position='none') +
     scale_color_manual(values=color_map) +
     labs(x='time (ms)') + xlim(670, 730)
 
-histograms
-dev.new()
-raster
-tr<-read_feather(file.path(dir, 'traces.feather'))
-ggplotly(ggplot(tr, aes(x=t, y=v)) + geom_line())
+fig <- (raster + histograms) + plot_annotation(tag_levels='A')
+ggsave(save_path, fig)
