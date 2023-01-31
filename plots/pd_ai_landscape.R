@@ -17,11 +17,13 @@ if (length(args)==0){
     stop("Folder with data folders must be provided")
 }else{
     folder = args[1]
+    save_path <- args[2]  # with name and extension
 }
 
 wd = getwd()
 dir_list <- Sys.glob(file.path(wd, folder, 'win*', 'spikes.feather'))
-sim_names <- map_chr(dir_list, ~str_extract(., "win[:digit:]*_bg[:digit:]*"))
+sim_names <- map_chr(dir_list, ~str_extract(., "win[:graph:]*_bg[:graph:]*"))
+sim_names <- map_chr(sim_names, ~str_remove(., '/metadata.json'))
 spikes_list <- map(dir_list, read_feather)
 dir_list <- Sys.glob(file.path(wd, folder, 'win*', 'metadata.json'))
 metadata_list <- map(dir_list, fromJSON)
@@ -92,7 +94,7 @@ fig <- ggplot(ainess, aes(x=win, y=bg, z=ratio/100)) +
     geom_contour_filled() +
     scale_x_continuous(expand=c(0, 0)) +
     scale_y_continuous(expand=c(0, 0)) +
-    scale_fill_manual(values=wes_palette('Zissou1', 8, type='continuous'),
+    scale_fill_manual(values=wes_palette('Zissou1', 10, type='continuous'),
                       name='AI %') +
     labs(x='inhibitory weight (a.u)', y='background rate (Hz)')
-ggsave(file.path(wd, folder, 'fig.png'), fig)
+ggsave(save_path, fig)

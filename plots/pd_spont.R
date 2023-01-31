@@ -9,13 +9,17 @@ library(stringr)
 library(dplyr)
 library(purrr)
 library(forcats)
+library(wesanderson)
 
 args = commandArgs(trailingOnly=T)
 if (length(args)==0){
     stop("Folder with data must be provided")
 }else{
     folder = args[1]
+    save_path <- args[2]  # with name and extension
 }
+
+color_map <- wes_palette('Moonrise1')
 
 wd = getwd()
 dir <- Sys.glob(file.path(wd, folder))
@@ -45,7 +49,8 @@ raster <- ggplot(df_raster, aes(x=t, y=i, color=type)) +
                axis.ticks.y=element_blank()) +
          guides(color=guide_legend(override.aes=list(size=5))) +
          facet_grid(rows=vars(laminae), scales="free") +
-         labs(x='time (ms)', y=element_blank())
+         labs(x='time (ms)', y=element_blank()) +
+         scale_color_manual(values=color_map[c(4, 2)])
 
 # Measures
 n_sample <- 1000
@@ -112,4 +117,4 @@ synchrony <- syncs %>%
     labs(x='synchrony', y=element_blank())
 
 fig <- (raster | (freq / irregularity / synchrony)) + plot_annotation(tag_levels='A')
-ggsave(file.path(dir, 'fig.png'), fig)
+ggsave(save_path, fig)
