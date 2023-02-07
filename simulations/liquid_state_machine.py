@@ -55,7 +55,7 @@ def liquid_state_machine(args):
 
     """ =================== Inputs =================== """
     item_rate = 128
-    repetitions = 800
+    repetitions = 2200
     inter_spk_interval = np.ceil(1/item_rate*1000).astype(int)
     inter_seq_interval = 200
     item_spikes = 1
@@ -97,8 +97,8 @@ def liquid_state_machine(args):
     silence = None
 
     # for emulating sleep
-    sleep_iter = 200
-    silence = {'iteration': [sleep_iter], 'duration': [10000]}
+    sleep_iter = 600
+    silence = {'iteration': [sleep_iter], 'duration': [80000]}
 
     input_indices, input_times, events = create_testbench(sequences,
                                                           labels,
@@ -110,7 +110,7 @@ def liquid_state_machine(args):
     input_times = np.array(input_times) * ms
     num_channels = int(max(input_indices) + 1)
     sim_dur = events[-1][2] + inter_seq_interval*ms
-    test_size = 100
+    test_size = 1100
     test_t = events[-test_size][2] + inter_seq_interval*ms
     input_spikes = SpikeGeneratorGroup(num_channels,
                                        input_indices,
@@ -202,6 +202,11 @@ def liquid_state_machine(args):
     # for when intrinsic plasticity is to be used
     # TODO i might need to be faster: 5 instead of 2
     e_neu_model.modify_model('namespace', 0.005*mV, key='thr_inc')
+    e_neu_model.modify_model(
+        'model',
+        '(int(Iconst>0*pA)*Vthr + int(Iconst==0*pA)*(alpha_thr*Vthr + dt*alpha_thr*thr_min/tau_thr))',
+        old_expr='(alpha_thr*Vthr + dt*alpha_thr*thr_min/tau_thr)')
+    e_neu_model.modify_model('reset', 'thr_inc*int(Iconst==0*pA)', old_expr='thr_inc')
 
     e_neu_model.modify_model('model', 'gtot = gtot0 + gtot1 + gtot2 + gtot3 + gtot4',
                              old_expr='gtot = gtot0')
@@ -318,7 +323,7 @@ def liquid_state_machine(args):
     #e_syn_model.modify_model('namespace', .001, key='h_eta')
 
     # TODO learning rate should be paired with normalization or hSTDP
-    e_syn_model.modify_model('namespace', .05*mV, key='eta')
+    #e_syn_model.modify_model('namespace', .05*mV, key='eta')
 
     # TODO do i need this? I DONT think so
     e_syn_model.modify_model('parameters',
@@ -354,7 +359,7 @@ def liquid_state_machine(args):
     e_syn_model.modify_model('connection', targets, key='j')
 
     # for emulating sleep
-    e_syn_model.on_post += 'w_plast -= int(Iconst_post>0*pA)*int(Ca_post>1)*w_plast*.05\n'
+    e_syn_model.on_post += 'w_plast = w_plast - (int(Iconst_post>0*pA)*int(Ca_post>5)*mV*.002) + int(Iconst_post>0*pA)*int(Ca_post<3)*mV*.002\n'
     e_syn_model.modify_model(
         'on_pre',
         'w_plast = clip(w_plast - int(Iconst_post==0*pA)*eta*j_trace, 0*volt, w_max)',
@@ -366,6 +371,7 @@ def liquid_state_machine(args):
 
     #e_syn_model.print_model()
     e_syn_model.modify_model('parameters', 'clip(1 + .1*randn(), 0, inf)*mV', key='w_plast')
+    e_syn_model.modify_model('namespace', 0.1*mV, key='eta')
     exc_readout = create_synapses(exc_cells, readout, e_syn_model,
                                   name='exc_readout')
     # only if hSTDP is used
@@ -454,7 +460,7 @@ def liquid_state_machine(args):
                             record=selected_exc_cells)
     sttmon_i = StateMonitor(inh_cells, variables='Vm',
                             record=selected_inh_cells)
-    sttmon_ro = StateMonitor(readout, variables=['Vm', 'Iconst', 'Vthr'],
+    sttmon_ro = StateMonitor(readout, variables=['Vm', 'Iconst', 'Vthr', 'Ca'],
                              record=[x for x in range(num_labels)])
     sttmon_w = StateMonitor(exc_readout, variables='w_plast',
                             record=[x for x in range(len(sources))])
@@ -474,7 +480,7 @@ def liquid_state_machine(args):
     # TODO this for just weight decay and intrinsic plasticity
     readout.namespace['tau_thr'] = 120000*ms
     readout.namespace['thr_inc'] = 0.01*mV
-    #readout.Vthr = 1*mV
+    #readout.Vthr = 1*mV # TODO maybe i dont need this
 
     # if iSTDP is used
     #inh_readout.namespace['eta'] = 0*mV
@@ -566,23 +572,6 @@ def liquid_state_machine(args):
         plot_instantaneous_rates_colormesh(pop_rates)
         plt.title('Neuron rates on last trial')
 
-        isi_neu = [isi(spks) for spks in spk_trains]
-        fig, ax3 = plt.subplots()
-        flatten_isi = []
-        for vals in isi_neu:
-            flatten_isi = np.append(flatten_isi, vals)
-        ax3.hist(flatten_isi, bins=np.linspace(-3, 100, 10))
-        ax3.set_title('ISI distribution')
-        ax3.set_xlabel('ISI')
-        ax3.set_ylabel('count')
-
-        plt.figure()
-        cv_neu = [cv(x) for x in isi_neu]
-        plt.hist(cv_neu)
-        plt.title('Coefficient of variation')
-        plt.ylabel('count')
-        plt.xlabel('CV')
-
         output_spikes = pd.DataFrame(
             {'time_ms': np.array(spkmon_ro.t/defaultclock.dt),
              'id': np.array(spkmon_ro.i)})
@@ -625,10 +614,10 @@ def liquid_state_machine(args):
         feather.write_dataframe(nodes, f'{args.save_path}/nodes.feather')
 
         # for emulating sleep
-        #plt.figure()
-        #plt.plot(sttmon_ro.Ca[0])
-        #plt.figure()
-        #plt.plot(sttmon_ro.Ca[1])
+        plt.figure()
+        plt.plot(sttmon_ro.Ca[0])
+        plt.figure()
+        plt.plot(sttmon_ro.Ca[1])
 
         plt.figure()
         brian_plot(sttmon_w[np.where(targets==0)[0]])
