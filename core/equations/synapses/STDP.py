@@ -18,12 +18,10 @@ class STDP(CUBA):
 
         self.modify_model('on_pre', 'g += w_plast', 'g += weight')
         self.modify_model('model', '', 'weight : volt')
-        self.on_pre += ('i_trace = 1\n'
-                         + 'w_plast = clip(w_plast - eta*j_trace, 0*volt, w_max)\n'
-                         + 'j_trace = 0\n')
-        self.on_post += ('j_trace = 1\n'
-                         + 'w_plast = clip(w_plast + eta*i_trace, 0*volt, w_max)\n'
-                         + 'i_trace = 0\n')
+        self.on_pre += ('i_trace += 1\n'
+                         + 'w_plast = clip(w_plast - eta*j_trace, 0*volt, w_max)\n')
+        self.on_post += ('j_trace += 1\n'
+                         + 'w_plast = clip(w_plast + eta*i_trace, 0*volt, w_max)\n')
         self.namespace = ParamDict({**self.namespace,
                                     **{'w_max': 100*mV,
                                        'eta': 1*mV,
