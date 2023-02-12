@@ -1,33 +1,24 @@
-# -*- coding: utf-8 -*-
-# @Author: mmilde
-# @Date:   2018-01-16 17:57:35
-
+""" This file has modified versions of some code from Teili. See
+M. Milde, A. Renner, R. Krause, A. M. Whatley, S. Solinas, D. Zendrikov,
+N. Risi, M. Rasetto, K. Burelo, V. R. C. Leite. teili: A toolbox for building
+and testing neural algorithms and computational primitives using spiking neurons.
+Unreleased software, Institute of Neuroinformatics, University of Zurich and ETH
+Zurich, 2018.
 """
-This file provides an example of how to use neuron and synapse models which are present
-on neurmorphic chips in the context of synaptic plasticity based on precise timing of spikes.
-We use a standard STDP protocal with a exponentioally decaying window.
 
-"""
-import pyqtgraph as pg
 import numpy as np
-from copy import deepcopy
 
-from brian2 import ms, mA, mV, us, uS, second, pA, prefs,\
-    SpikeMonitor, StateMonitor, defaultclock, run, set_device,\
-    SpikeGeneratorGroup
+from brian2 import run, device
 
+from core.utils.misc import minifloat2decimal
 
-from teili.core.groups import set_params
-from teili.tools.visualizer.DataViewers import PlotSettings
-from teili.tools.visualizer.DataModels import StateVariablesModel
-from teili.tools.visualizer.DataControllers import Lineplot, Rasterplot
-
-from pyqtgraph.Qt import QtGui
-
-from equations.neurons.LIF import LIF
-from equations.synapses.CUBA import CUBA
-from equations.synapses.STDP import STDP
-from builder.groups_builder import create_synapses, create_neurons
+from core.equations.neurons.LIF import LIF
+from core.equations.synapses.CUBA import CUBA
+from core.equations.synapses.STDP import STDP
+from core.equations.neurons.fp8LIF import fp8LIF
+from core.equations.synapses.fp8CUBA import fp8CUBA
+from core.equations.synapses.fp8STDP import fp8STDP
+from core.builder.groups_builder import create_synapses, create_neurons
 
 def stimuli(isi=10):
     """Stimulus gneration for STDP protocols.
@@ -75,34 +66,29 @@ def stimuli(isi=10):
         1, indices=ind_post, times=t_post * ms, name='gPost')
     return pre, post
 
+def stdp(args):
+    defaultclock.dt = args.timestep * ms
 
-app = QtGui.QApplication.instance()
-QtApp = QtGui.QApplication([])
-prefs.codegen.target = "numpy"
-#set_device('cpp_standalone')
-defaultclock.dt = 1*ms
-neuron_model = LIF()
-synapse_model = CUBA()
-stdp_model = STDP()
+    pre_spikegenerator, post_spikegenerator = stimuli(isi=30)
 
-# TODO try isi=10 with reduced symmetric interpretation
-pre_spikegenerator, post_spikegenerator = stimuli(isi=30)
+    neuron_model = fp8LIF()
+    # TODO 3ms refrac?
+    pre_neurons = create_neurons(2, neuron_model)
+    post_neurons = create_neurons(2, neuron_model)
 
-neuron_model.refractory = 3*ms
-pre_neurons = create_neurons(2, neuron_model)
+    synapse_model = fp8CUBA()
+    # TODO strong input and 3ms tau?
+    pre_synapse = create_synapses(pre_spikegenerator, pre_neurons, synapse_model)
+    post_synapse = create_synapses(post_spikegenerator, post_neurons, synapse_model)
 
-neuron_model = LIF()
-neuron_model.refractory = 3*ms
-old_pattern = 'gtot = gtot0 : volt'
-new_pattern = 'gtot = gtot0 + gtot1 : volt'
-neuron_model.modify_model('model', new_pattern, old_pattern)
-neuron_model.model += 'gtot1 : volt'
-post_neurons = create_neurons(2, neuron_model)
+    stdp_model = fp8STDP()
 
-synapse_model.parameters['tau_syn'] = 3*ms
-synapse_model.parameters['weight'] = 200*mV
-pre_synapse = create_synapses(pre_spikegenerator, pre_neurons, synapse_model)
-post_synapse = create_synapses(post_spikegenerator, post_neurons, synapse_model)
+    run...
+    if args.backend == 'cpp_standalone':
+        device.build(args.code_path)
+
+
+
 
 old_pattern = 'gtot0_post = g'
 new_pattern = 'gtot1_post = g'
