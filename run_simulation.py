@@ -1,4 +1,5 @@
 from simulations.liquid_state_machine import liquid_state_machine
+from simulations.sleep_normalization import sleep_normalization
 from simulations.fp8_potjans_diesmann import fp8_potjans_diesmann
 from simulations.neuron_synapse_models import neuron_synapse_models
 from simulations.balanced_network import balanced_network
@@ -51,6 +52,16 @@ subparser_lsm.add_argument('--precision', type=str, default='fp64',
                            help=f'Bit precision used. Currently only supports '
                                 f'8 and 64')
 subparser_lsm.set_defaults(func=liquid_state_machine)
+
+subparser_sleep = subparsers.add_parser('sleep',
+                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+subparser_sleep.add_argument('--size', type=int, default=128,
+                           help='size of the liquid')
+subparser_sleep.add_argument('--trial', type=int, default=0, help='trial number')
+subparser_sleep.add_argument('--precision', type=str, default='fp64',
+                           help=f'Bit precision used. Currently only supports '
+                                f'8 and 64')
+subparser_sleep.set_defaults(func=sleep_normalization)
 
 subparser_pd = subparsers.add_parser('PD',
                                       formatter_class=argparse.ArgumentDefaultsHelpFormatter)

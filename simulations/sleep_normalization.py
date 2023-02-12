@@ -36,7 +36,7 @@ import feather
 from sklearn.svm import LinearSVC
 
 
-def liquid_state_machine(args):
+def sleep_normalization(args):
     # freezing noise
     #import random
     #random.seed(25)
@@ -97,8 +97,7 @@ def liquid_state_machine(args):
     silence = None
 
     # for emulating sleep
-    sleep_iter = 600
-    silence = {'iteration': [sleep_iter], 'duration': [80000]}
+    silence = {'iteration': [200, 400, 600, 800], 'duration': [60000, 60000, 60000, 60000]}
 
     input_indices, input_times, events = create_testbench(sequences,
                                                           labels,
@@ -148,17 +147,23 @@ def liquid_state_machine(args):
     # for emulating sleep
     # TODO timestamp and pattern with label to create_testbench? to be inserted into testbench
     # TODO sleep cycles (check ~/test.py)
-    sleep_time = events[sleep_iter][2]
-    wake_time = events[sleep_iter+1][1]
+    sleep_time1 = events[200][2]
+    wake_time1 = events[200+1][1]
+    sleep_time2 = events[400][2]
+    wake_time2 = events[400+1][1]
+    sleep_time3 = events[600][2]
+    wake_time3 = events[600+1][1]
+    sleep_time4 = events[800][2]
+    wake_time4 = events[800+1][1]
     if args.precision == 'fp64':
         e_neu_model.modify_model(
             'model',
-            'Iconst = 0*pA + 200*pA*int(t>sleep_time)*int(t<wake_time) : ampere',
+            'Iconst = 0*pA + 200*pA*int(t>sleep_time1)*int(t<wake_time1) + 200*pA*int(t>sleep_time2)*int(t<wake_time2) + 200*pA*int(t>sleep_time3)*int(t<wake_time3) + 200*pA*int(t>sleep_time4)*int(t<wake_time4) : ampere',
             old_expr='Iconst : ampere')
     else:
         e_neu_model.modify_model(
             'model',
-            'Iconst = 0 + 200*int(t>sleep_time)*int(t<wake_time) : ampere',
+            'Iconst = 0 + 200*pA*int(t>sleep_time1)*int(t<wake_time1) + 200*pA*int(t>sleep_time2)*int(t<wake_time2) + 200*pA*int(t>sleep_time3)*int(t<wake_time3) + 200*pA*int(t>sleep_time4)*int(t<wake_time4) : ampere',
             old_expr='Iconst : ampere')
     del e_neu_model.parameters['Iconst']
 
@@ -218,7 +223,7 @@ def liquid_state_machine(args):
     # for emulating sleep
     e_neu_model.modify_model(
         'model',
-        'Iconst = 0*pA + 200*pA*int(t>sleep_time)*int(t<wake_time) : ampere',
+        'Iconst = 0*pA + 200*pA*int(t>sleep_time1)*int(t<wake_time1) + 200*pA*int(t>sleep_time2)*int(t<wake_time2) + 200*pA*int(t>sleep_time3)*int(t<wake_time3) + 200*pA*int(t>sleep_time4)*int(t<wake_time4) : ampere',
         old_expr='Iconst : ampere')
     del e_neu_model.parameters['Iconst']
 
@@ -294,11 +299,6 @@ def liquid_state_machine(args):
     inh_exc = create_synapses(inh_cells, exc_cells, i_syn_model)
 
     e_syn_model = STDP()
-    # TODO this stdp version could be used by default (wich also affects childs)?
-    e_syn_model.modify_model('on_pre', 'i_trace += 1', old_expr='i_trace = 1')
-    e_syn_model.modify_model('on_pre', '', old_expr='j_trace = 0')
-    e_syn_model.modify_model('on_post', 'j_trace += 1', old_expr='j_trace = 1')
-    e_syn_model.modify_model('on_post', '', old_expr='i_trace = 0')
     e_syn_model.modify_model('on_pre', 'g_syn += w_plast',
                              old_expr='g += w_plast')
 
@@ -362,16 +362,16 @@ def liquid_state_machine(args):
     e_syn_model.on_post += 'w_plast = w_plast - (int(Iconst_post>0*pA)*int(Ca_post>5)*mV*.002) + int(Iconst_post>0*pA)*int(Ca_post<3)*mV*.002\n'
     e_syn_model.modify_model(
         'on_pre',
-        'w_plast = clip(w_plast - int(Iconst_post==0*pA)*eta*j_trace, 0*volt, w_max)',
+        'w_plast = clip(w_plast - int(Iconst_post==0*pA)*(w_plast/mV)*eta*j_trace, 0*volt, w_max)',
         old_expr='w_plast = clip(w_plast - eta*j_trace, 0*volt, w_max)')
     e_syn_model.modify_model(
         'on_post',
-        'w_plast = clip(w_plast + int(Iconst_post==0*pA)*eta*i_trace, 0*volt, w_max)\n',
+        'w_plast = clip(w_plast + int(Iconst_post==0*pA)*((w_max-w_plast)/mV)*eta*i_trace, 0*volt, w_max)\n',
         old_expr='w_plast = clip(w_plast + eta*i_trace, 0*volt, w_max)\n')
 
     #e_syn_model.print_model()
     e_syn_model.modify_model('parameters', 'clip(1 + .1*randn(), 0, inf)*mV', key='w_plast')
-    e_syn_model.modify_model('namespace', 0.1*mV, key='eta')
+    e_syn_model.modify_model('namespace', 0.001*mV, key='eta')
     exc_readout = create_synapses(exc_cells, readout, e_syn_model,
                                   name='exc_readout')
     # only if hSTDP is used
