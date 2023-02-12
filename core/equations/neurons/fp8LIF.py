@@ -13,7 +13,10 @@ class fp8LIF(BaseNeuron):
             summed_decay = fp8_add(decay_term, gtot*int(not_refractory)) : integer
             decay_term = fp8_multiply(Vm, alpha)*int(not_refractory) + fp8_multiply(Vm, alpha_refrac)*int(not not_refractory) : integer
             gtot = fp8_add(g, Iconst) : integer
+
             dg/dt = fp8_multiply(g, alpha_syn)/second : 1
+
+            dCa/dt = fp8_multiply(Ca, alpha_ca)/second : 1
 
             Iconst : integer
             Vm_noise : volt
@@ -22,6 +25,7 @@ class fp8LIF(BaseNeuron):
             alpha : integer (constant)
             alpha_refrac : integer (constant)
             alpha_syn : integer (constant)
+            alpha_ca : integer (constant)
             '''
             #dVm/dt = (int(refrac==0)*clip_normal_dec + int(refrac==1)*refractory_decay)/second : 1
             #clip_normal_dec = int(clip_rule == 0) * normal_decay : integer
@@ -35,6 +39,7 @@ class fp8LIF(BaseNeuron):
         self.reset = '''
             Vm=Vreset;
             Vm_noise = 0*mV
+            Ca = fp8_add(Ca, 56)
             '''
         self.namespace = ParamDict({
             'Vthr': 127,  # 480 in decimal
@@ -46,6 +51,7 @@ class fp8LIF(BaseNeuron):
             'alpha': '55',  # 0.9375 in decimal,
             'alpha_refrac': '1',  # 0.00195312 in decimal
             'alpha_syn': '53',  # 0.8125 in decimal,
+            'alpha_ca': '55',  # 0.9375 in decimal,
             'Vm': '0',
             'g': '0',
             'Vm_noise': '0*mV',
