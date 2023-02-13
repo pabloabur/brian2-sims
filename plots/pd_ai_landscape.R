@@ -92,3 +92,6 @@ fig <- ggplot(ainess, aes(x=win, y=bg)) +
                          name='AI %') +
     labs(x='inhibitory weight (a.u)', y='background rate (Hz)')
 ggsave(argv$dest, fig)
+# To save plot as in thesis, I ran interactively for both int8 and fp8, and 
+# saved it with fig <- figi | figf + plot_annotation(tag_levels='A');
+# ggsave(argv$dest, ff, height=10, units='cm')
