@@ -350,11 +350,21 @@ def minifloat2decimal(bitstring):
     """ Converts the 8-bit floating point representation to a decimal
         full-precision (according to python) representation.
 
-    Args:
-        bitstring (int, float, list or numpy.array): Binary word. In case of
-        a floating point number, fractional part is discarded with int casting.
-    Returns:
-        float: Converted value in decimal.
+    Parameters
+    ----------
+    bitstring : int, float, list or numpy.array
+        Binary word. In case of a floating point number, fractional part is
+        discarded with int casting.
+
+    Returns
+    -------
+    float
+        Converted value in decimal.
+
+    Notes
+    -----
+    For small numbers, it is worth setting np.set_printoptions(precision=20)
+    so there is no truncation.
     """
     if isinstance(bitstring, int) or isinstance(bitstring, float):
         bitstring = np.array([bitstring])
