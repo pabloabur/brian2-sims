@@ -9,4 +9,4 @@ psr <- add_argument(psr, c('--source', '--dest'),
 
 argv <- parse_args(psr)
 
-argv$dest <- if(is.na(argv$dest)) './fig.png' else argv$dest
+argv$dest <- if(is.na(argv$dest)) paste(argv$source, 'fig.png', sep='/') else argv$dest
