@@ -91,7 +91,7 @@ def stdp(args):
     stdp_model = fp8STDP()
     stdp_model.modify_model('connection', "i==j", key='condition')
     stdp_model.modify_model('parameters',
-                            decimal2minifloat(0.00195312),
+                            decimal2minifloat(0.001953125),
                             key='w_plast')
     # TODO tau syn and stdp tau 3ms?
     stdp_synapse = create_synapses(pre_neurons, post_neurons, stdp_model)
