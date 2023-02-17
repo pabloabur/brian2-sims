@@ -71,7 +71,7 @@ def liquid_state_machine(args):
     input_times = np.array(input_times) * ms
     num_channels = int(max(input_indices) + 1)
     sim_dur = events[-1][2] + inter_seq_interval*ms
-    test_size = len(events) - 10
+    test_size = 45
     test_t = events[-test_size][2] + inter_seq_interval*ms
     input_spikes = SpikeGeneratorGroup(num_channels,
                                        input_indices,
@@ -79,7 +79,7 @@ def liquid_state_machine(args):
 
     """ =================== Neurons =================== """
     Nt = args.size
-    Ne, Ni = np.rint(Nt*.85).astype(int), np.rint(Nt*.15).astype(int)
+    Ne, Ni = np.rint(Nt*.80).astype(int), np.rint(Nt*.20).astype(int)
     # In case rounding makes a difference
     Nt = Ne + Ni
 
@@ -154,12 +154,8 @@ def liquid_state_machine(args):
         i_syn_model.modify_model('namespace',
                                  decimal2minifloat(-1),
                                  key='w_factor')
-        i_syn_model.modify_model('parameters',
-                                 decimal2minifloat(96),
-                                 key='weight')
     if args.precision == 'fp64':
         i_syn_model.modify_model('namespace', -1, key='w_factor')
-        i_syn_model.modify_model('parameters', 14*mV, key='weight')
         i_syn_model.modify_model('model', 'gtot3_post', old_expr='gtot0_post')
     inh_inh = create_synapses(inh_cells, inh_cells, i_syn_model)
 
@@ -176,14 +172,6 @@ def liquid_state_machine(args):
     # This just for classify on input directly
     #spkmon_inp = SpikeMonitor(input_spikes)
 
-    selected_exc_cells = np.random.choice(Ne, 4, replace=False)
-    selected_inh_cells = np.random.choice(Ni, 4, replace=False)
-    sttmon_e = StateMonitor(exc_cells, variables='Vm',
-                            record=selected_exc_cells)
-    sttmon_i = StateMonitor(inh_cells, variables='Vm',
-                            record=selected_inh_cells)
-
-    kernel = kernels.GaussianKernel(sigma=30*q.ms)
     print('Running simulation')
     run(test_t)
 
@@ -214,6 +202,7 @@ def liquid_state_machine(args):
     lr.fit(samples[:, :train_size].T, [x[0] for x in events][:train_size])
     acc = lr.score(samples[:, train_size:].T, [x[0] for x in events][train_size:])
 
+    kernel = kernels.GaussianKernel(sigma=30*q.ms)
     temp_trains = spkmon_e.spike_trains()
     spk_trains = [neo.SpikeTrain(temp_trains[x]/ms, t_stop=sim_dur/ms, units='ms')
                   for x in temp_trains]
@@ -222,9 +211,7 @@ def liquid_state_machine(args):
                                               kernel=kernel)
     pop_avg_rates = np.mean(pop_rates, axis=1)
 
-    Metadata = {'selected_exc_cells': selected_exc_cells.tolist(),
-                'selected_inh_cells': selected_inh_cells.tolist(),
-                'dt': str(defaultclock.dt),
+    Metadata = {'dt': str(defaultclock.dt),
                 'args.trial': args.trial,
                 'precision': args.precision,
                 'size': args.size,
@@ -266,6 +253,10 @@ def liquid_state_machine(args):
         ax1.set_xlabel(f'time ({pop_rates.times.dimensionality.latex})')
         ax1.set_ylabel('neuron number')
         ax2.set_ylabel(f'rate ({pop_rates.dimensionality})')
+
+        fig, (ax3, ax4) = plt.subplots(2, 1, sharex=True)
+        brian_plot(spkmon_e, axes=ax3)
+        ax4.plot(input_times/ms, input_indices, '.')
 
         plot_instantaneous_rates_colormesh(pop_rates)
         plt.title('Neuron rates on last trial')
