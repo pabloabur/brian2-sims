@@ -122,10 +122,10 @@ def liquid_state_machine(args):
     e_syn_model.modify_model('connection', .12, key='p')
     if args.precision == 'fp8':
         e_syn_model.modify_model('parameters',
-                                 decimal2minifloat(96),
+                                 97,
                                  key='weight')
     if args.precision == 'fp64':
-        e_syn_model.modify_model('parameters', 80*mV, key='weight')
+        e_syn_model.modify_model('parameters', 23.5*mV, key='weight')
         e_syn_model.modify_model('model', 'gtot1_post', old_expr='gtot0_post')
     thl_conns = create_synapses(input_spikes, cells, e_syn_model)
 
@@ -135,13 +135,8 @@ def liquid_state_machine(args):
         '.3 * exp(-((x_pre-x_post)**2 + (y_pre-y_post)**2 + (z_pre-z_post)**2) / 2**2)',
         key='p')
     e_syn_model.modify_model('parameters', '20*rand()*ms', key='delay')
-    if args.precision == 'fp8':
-        e_syn_model.modify_model('parameters',
-                                 decimal2minifloat(24),
-                                 key='weight')
-    elif args.precision == 'fp64':
+    if args.precision == 'fp64':
         e_syn_model.modify_model('model', 'gtot2_post', old_expr='gtot0_post')
-        e_syn_model.modify_model('parameters', 20*mV, key='weight')
     exc_exc = create_synapses(exc_cells, exc_cells, e_syn_model)
 
     e_syn_model.modify_model(
@@ -160,11 +155,11 @@ def liquid_state_machine(args):
                                  decimal2minifloat(-1),
                                  key='w_factor')
         i_syn_model.modify_model('parameters',
-                                 decimal2minifloat(120),
+                                 decimal2minifloat(96),
                                  key='weight')
     if args.precision == 'fp64':
         i_syn_model.modify_model('namespace', -1, key='w_factor')
-        i_syn_model.modify_model('parameters', 100*mV, key='weight')
+        i_syn_model.modify_model('parameters', 14*mV, key='weight')
         i_syn_model.modify_model('model', 'gtot3_post', old_expr='gtot0_post')
     inh_inh = create_synapses(inh_cells, inh_cells, i_syn_model)
 
@@ -175,23 +170,14 @@ def liquid_state_machine(args):
     inh_exc = create_synapses(inh_cells, exc_cells, i_syn_model)
 
     """ =================== Results =================== """
-    selected_exc_cells = np.random.choice(Ne, 4, replace=False)
-    selected_inh_cells = np.random.choice(Ni, 4, replace=False)
-
-    Metadata = {'selected_exc_cells': selected_exc_cells.tolist(),
-                'selected_inh_cells': selected_inh_cells.tolist(),
-                'dt': str(defaultclock.dt),
-                'args.trial': args.trial,
-                'duration': str(sim_dur)}
-    with open(args.save_path+'metadata.json', 'w') as f:
-        json.dump(Metadata, f)
-
     spkmon_e = SpikeMonitor(exc_cells)
     spkmon_i = SpikeMonitor(inh_cells)
 
     # This just for classify on input directly
     #spkmon_inp = SpikeMonitor(input_spikes)
 
+    selected_exc_cells = np.random.choice(Ne, 4, replace=False)
+    selected_inh_cells = np.random.choice(Ni, 4, replace=False)
     sttmon_e = StateMonitor(exc_cells, variables='Vm',
                             record=selected_exc_cells)
     sttmon_i = StateMonitor(inh_cells, variables='Vm',
@@ -227,9 +213,6 @@ def liquid_state_machine(args):
     samples = liquid_states[:, labels_times]
     lr.fit(samples[:, :train_size].T, [x[0] for x in events][:train_size])
     acc = lr.score(samples[:, train_size:].T, [x[0] for x in events][train_size:])
-    print(f'Accuracy was {acc}')
-    with open(f'size_{args.size}-FP_{args.precision}-trial_{args.trial}.txt', 'w') as f:
-        f.write(f'{acc:.2f}')
 
     temp_trains = spkmon_e.spike_trains()
     spk_trains = [neo.SpikeTrain(temp_trains[x]/ms, t_stop=sim_dur/ms, units='ms')
@@ -239,15 +222,17 @@ def liquid_state_machine(args):
                                               kernel=kernel)
     pop_avg_rates = np.mean(pop_rates, axis=1)
 
-    np.savez(f'{args.save_path}/exc_raster.npz',
-             times=spkmon_e.t/ms,
-             indices=spkmon_e.i)
-    np.savez(f'{args.save_path}/inh_raster.npz',
-             times=spkmon_i.t/ms,
-             indices=spkmon_i.i)
-    np.savez(f'{args.save_path}/rates.npz',
-             times=np.array(pop_rates.times),
-             rates=np.array(pop_avg_rates))
+    Metadata = {'selected_exc_cells': selected_exc_cells.tolist(),
+                'selected_inh_cells': selected_inh_cells.tolist(),
+                'dt': str(defaultclock.dt),
+                'args.trial': args.trial,
+                'precision': args.precision,
+                'size': args.size,
+                'trial': args.trial,
+                'accuracy': acc,
+                'duration': str(sim_dur)}
+    with open(args.save_path+'/metadata.json', 'w') as f:
+        json.dump(Metadata, f)
 
     input_spikes = pd.DataFrame(
         {'time_ms': input_times/defaultclock.dt,
