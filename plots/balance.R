@@ -6,16 +6,11 @@ library(dplyr)
 library(patchwork)
 library(wesanderson)
 
-args = commandArgs(trailingOnly=T)
-if (length(args)==0){
-    stop("Folder with data folders must be provided")
-}else{
-    folder = args[1]
-    save_path <- args[2]  # with name and extension
-}
+library(argparser)
+include('plots/parse_inputs.R')
 
 wd = getwd()
-dir_list <- Sys.glob(file.path(wd, folder, '*/'))
+dir_list <- Sys.glob(file.path(wd, argv$source, '*/'))
 
 vm <- map(file.path(dir_list, 'voltages.feather'), read_feather)
 rates <- map(file.path(dir_list, 'avg_rates.feather'), read_feather)
@@ -48,7 +43,7 @@ p2 <- ggplot(vm$'16-01_11h23m35s', aes(x=time_ms, y=values, color=resolution)) +
     guides(color=guide_legend(override.aes=list(size=4))) +
     theme_bw() + scale_color_manual(values=color_map[c(2, 4)])
 
-# rate over time for normal under balanced state?
+# Next plots were handpicked. If you dont have data, run it and choose file
 weights$'17-01_12h50m07s' <- weights$'17-01_12h50m07s' %>%
     filter(resolution=='fp64' | resolution=='fp8')
 weights$'17-01_12h50m07s'[weights$'17-01_12h50m07s'=='fp8'] = 'fp8, increased s.d.'
@@ -71,8 +66,8 @@ p4 <- selected_weights  %>%
     theme_bw()
 
 fig <- (p2 / p3 / p4) + plot_annotation(tag_levels='A')
-ggsave(str_replace(save_path, '.png', '1.png'), p1)
-ggsave(str_replace(save_path, '.png', '2.png'), fig)
+ggsave(str_replace(argv$dest, '.png', '1.png'), p1)
+ggsave(str_replace(argv$dest, '.png', '2.png'), fig)
 
 print('Average rate of a net running with uniform distribution:')
 print(separated_rates$'2023.01.17_15.40' %>% filter(resolution=='fp8'))

@@ -6,16 +6,11 @@ library(patchwork)
 library(forcats)
 library(wesanderson)
 
-args = commandArgs(trailingOnly=T)
-if (length(args)==0){
-    stop("Folder with data folders must be provided")
-}else{
-    folder <- args[1]
-    save_path <- args[2]  # with name and extension
-}
+library(argparser)
+include('plots/parse_inputs.R')
 
 wd = getwd()
-data_path <- file.path(wd, folder)
+data_path <- file.path(wd, argv$source)
 
 metadata <- fromJSON(file.path(data_path, 'metadata.json'))
 
@@ -101,4 +96,4 @@ p4 <- cch %>%
     labs(x='lags (ms)', y='correlation', tag='D')
 
 fig <- ((p1 / (p2[[1]] | p2[[2]] | p2[[3]] | p2[[4]] | p2[[5]])) / p3) / p4
-ggsave(save_path, fig)
+ggsave(argv$dest, fig)

@@ -124,23 +124,26 @@ def stdp(args):
         # TODO why does w decays to zero after first update?
         # TODO why is dec2mf returning ...5 at the end of conversion??
         brian_plot(spikemon_pre_neurons)
+        plt.savefig(f'{args.save_path}/fig1')
 
         plt.figure()
         brian_plot(spikemon_post_neurons)
+        plt.savefig(f'{args.save_path}/fig2')
 
         plt.figure()
         plot_state(statemon_post_synapse.t,
                    minifloat2decimal(statemon_post_synapse.w_plast[0]),
                    var_name='weight')
+        plt.savefig(f'{args.save_path}/fig3')
 
         plt.figure()
         plot_state(statemon_post_neurons.t,
                    minifloat2decimal(statemon_post_neurons.Ca[0]),
                    var_name='Time window')
+        plt.savefig(f'{args.save_path}/fig4')
 
         plt.figure()
         plot_state(statemon_pre_neurons.t,
                    minifloat2decimal(statemon_pre_neurons.Vm[0]),
                    var_name='Vm')
-
-        plt.show()
+        plt.savefig(f'{args.save_path}/fig5')

@@ -263,9 +263,8 @@ def neuron_synapse_models(args):
         plot_state(statemon_layer1_int4.t,
                    int4_vm_norm[0],
                    var_name='Vm', label='int4', axes=axs[2])
-
         plt.legend()
-        plt.pause(0.001)
+        plt.savefig(f'{args.save_path}/fig1')
 
         plt.figure()
         plot_rate(rate_layer1_fp64.times, rate_layer1_fp64[:, 0].magnitude.flatten(), label='fp64')
@@ -273,4 +272,4 @@ def neuron_synapse_models(args):
         plot_rate(rate_layer1_int8.times, rate_layer1_int8[:, 0].magnitude.flatten(), label='int8')
         plot_rate(rate_layer1_int4.times, rate_layer1_int4[:, 0].magnitude.flatten(), label='int4')
         plt.legend()
-        plt.show()
+        plt.savefig(f'{args.save_path}/fig2')

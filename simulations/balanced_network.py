@@ -7,8 +7,6 @@ from core.utils.misc import minifloat2decimal, decimal2minifloat
 from core.utils.prepare_models import generate_connection_indices
 from core.utils.process_responses import neurons_rate
 
-from core.parameters.orca_params import ConnectionDescriptor, PopulationDescriptor
-
 from core.equations.neurons.LIF import LIF
 from core.equations.synapses.CUBA import CUBA
 from core.equations.neurons.fp8LIF import fp8LIF
@@ -300,9 +298,9 @@ def balanced_network(args):
         plt.plot(pop_avg_rates[2], label='int8')
         plt.plot(pop_avg_rates[3], label='fp8')
         plt.legend()
+        plt.savefig(f'{args.save_path}/fig1')
 
         plt.figure()
         plt.plot(sttmon_e[0].Vm[2]/(20*mV))
         plt.plot(minifloat2decimal(sttmon_e[3].Vm[2])/480)
-
-        plt.show()
+        plt.savefig(f'{args.save_path}/fig2')

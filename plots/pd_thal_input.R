@@ -9,18 +9,13 @@ library(wesanderson)
 library(plotly)
 library(patchwork)
 
-args = commandArgs(trailingOnly=T)
-if (length(args)==0){
-    stop("Folder with data must be provided")
-}else{
-    folder = args[1]
-    save_path <- args[2]  # with name and extension
-}
+library(argparser)
+include('plots/parse_inputs.R')
 
 color_map <- wes_palette('Moonrise1')[c(4, 2)]
 
 wd = getwd()
-dir <- Sys.glob(file.path(wd, folder))
+dir <- Sys.glob(file.path(wd, argv$source,))
 
 spikes <- read_feather(file.path(dir, "spikes.feather"))
 metadata <- fromJSON(file.path(dir, "metadata.json"))
@@ -62,4 +57,4 @@ histograms <- df_raster %>%
     labs(x='time (ms)') + xlim(670, 730)
 
 fig <- (raster + histograms) + plot_annotation(tag_levels='A')
-ggsave(save_path, fig)
+ggsave(argv$dest, fig)

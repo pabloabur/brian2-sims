@@ -560,6 +560,7 @@ def sleep_normalization(args):
                    transform=ax0.get_xaxis_transform(), colors='r')
         brian_plot(spkmon_e, axes=ax1)
         ax2.plot(input_times/ms, input_indices, '.')
+        plt.savefig(f'{args.save_path}/fig1.png')
 
         fig, ax1 = plt.subplots()
         ax2 = ax1.twinx()
@@ -568,9 +569,11 @@ def sleep_normalization(args):
         ax1.set_xlabel(f'time ({pop_rates.times.dimensionality.latex})')
         ax1.set_ylabel('neuron number')
         ax2.set_ylabel(f'rate ({pop_rates.dimensionality})')
+        plt.savefig(f'{args.save_path}/fig2.png')
 
         plot_instantaneous_rates_colormesh(pop_rates)
         plt.title('Neuron rates on last trial')
+        plt.savefig(f'{args.save_path}/fig3.png')
 
         output_spikes = pd.DataFrame(
             {'time_ms': np.array(spkmon_ro.t/defaultclock.dt),
@@ -616,13 +619,16 @@ def sleep_normalization(args):
         # for emulating sleep
         plt.figure()
         plt.plot(sttmon_ro.Ca[0])
+        plt.savefig(f'{args.save_path}/fig4.png')
         plt.figure()
         plt.plot(sttmon_ro.Ca[1])
+        plt.savefig(f'{args.save_path}/fig5.png')
 
         plt.figure()
         brian_plot(sttmon_w[np.where(targets==0)[0]])
+        plt.savefig(f'{args.save_path}/fig6.png')
         plt.figure()
         brian_plot(sttmon_w[np.where(targets==1)[0]])
+        plt.savefig(f'{args.save_path}/fig7.png')
 
         print(readout.incoming_weights)
-        plt.show()

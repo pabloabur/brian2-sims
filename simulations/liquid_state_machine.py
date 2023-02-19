@@ -253,12 +253,13 @@ def liquid_state_machine(args):
         ax1.set_xlabel(f'time ({pop_rates.times.dimensionality.latex})')
         ax1.set_ylabel('neuron number')
         ax2.set_ylabel(f'rate ({pop_rates.dimensionality})')
+        plt.savefig(f'{args.save_path}/fig1.png')
 
         fig, (ax3, ax4) = plt.subplots(2, 1, sharex=True)
         brian_plot(spkmon_e, axes=ax3)
         ax4.plot(input_times/ms, input_indices, '.')
+        plt.savefig(f'{args.save_path}/fig2.png')
 
         plot_instantaneous_rates_colormesh(pop_rates)
         plt.title('Neuron rates on last trial')
-
-        plt.show()
+        plt.savefig(f'{args.save_path}/fig3.png')
