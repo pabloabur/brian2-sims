@@ -5,10 +5,10 @@ RUN micromamba install -y -n base -f /tmp/env.yaml && \
 ARG MAMBA_DOCKERFILE_ACTIVATE=1
 RUN python -c 'import uuid; print(uuid.uuid4())' > /tmp/my_uuid
 RUN python -c "import brian2"
-RUN pip install git
+#RUN pip install git
 
-RUN python -c "import git"
+#RUN python -c "import git"
 COPY . .
 USER $MAMBA_USER
 RUN python run_simulation.py -h
-RUN micromamba install -y -n base git 
+#RUN micromamba install -y -n base git 
