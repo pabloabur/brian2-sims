@@ -1,5 +1,8 @@
 FROM condaforge/mambaforge as conda
+USER mambauser
+USER root
 ARG USERNAME=jovyan
+
 ARG USER_UID=1000
 ARG USER_GID=$USER_UID
 
