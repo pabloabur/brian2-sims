@@ -1,3 +1,5 @@
+[![Docker Image CI](https://github.com/pabloabur/brian2-sims/actions/workflows/docker-image.yml/badge.svg)](https://github.com/pabloabur/brian2-sims/actions/workflows/docker-image.yml)
+
 # brian2-sims
 
 [![Docker Image CI](https://github.com/fun-zoological-computing/brian2-sims/actions/workflows/docker-image.yml/badge.svg)](https://github.com/fun-zoological-computing/brian2-sims/actions/workflows/docker-image.yml)
