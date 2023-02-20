@@ -17,4 +17,4 @@ jobs:
     - name: Build the Docker image
       run: docker build . --tag simple_build_and_run
     - name: run the bothersome stdp file
-      run docker run simple_build_and_run
+      run: docker run simple_build_and_run
