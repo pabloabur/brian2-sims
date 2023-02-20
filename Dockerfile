@@ -1,7 +1,7 @@
 FROM jupyter/r-notebook
-
 COPY . ~/jovyan/work
-WORKDIR ~/jovyan/work
+# ADD . ~/jovyan/work
+
 RUN conda env create && echo "conda activate app" >> ~/.profile
 RUN Rscript requirements.R
-ENTRYPOINT /bin/python /brian2-sims/simulations/stdp.py
+ENTRYPOINT /bin/python ~/jovyan/work/brian2-sims/simulations/stdp.py
