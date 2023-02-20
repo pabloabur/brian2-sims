@@ -2,7 +2,7 @@ FROM condaforge/mambaforge
 RUN /bin/bash -c "conda init bash"
 COPY . $HOME
 RUN mamba env create --file environment.yml
-RUN conda env activate
+RUN conda activate env
 FROM jupyter/r-notebook
 
 RUN python run_simulation.py -h
