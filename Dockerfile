@@ -1,11 +1,12 @@
 FROM condaforge/mambaforge as conda
 #RUN /bin/bash -c "conda init bash"
-COPY . /pkg
+COPY . .
 #RUN --mount=type=cache,target=/opt/conda/pkgs mamba create --copy -p /env --file conda-linux-64.lock
-RUN conda run -p /env python -m pip install --no-deps /pkg
-
-FROM jupyter/r-notebook
-COPY --from=conda /env /env
+#RUN conda run -p /env python -m pip install --no-deps /pkg
+RUN conda install conda-build
+RUN conda develop .
+#FROM jupyter/r-notebook
+#COPY --from=conda /env /env
 
 RUN python run_simulation.py -h
 RUN make -h
