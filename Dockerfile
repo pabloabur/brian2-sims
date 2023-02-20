@@ -5,10 +5,13 @@ COPY . .
 #RUN conda run -p /env python -m pip install --no-deps /pkg
 RUN conda install conda-build
 RUN conda develop .
+RUN $(which pip) install -e .
+RUN $(which python) run_simulation.py -h
+
 #FROM jupyter/r-notebook
 #COPY --from=conda /env /env
-RUN $(which python3) -c "import brian2"
-RUN $(which python3) run_simulation.py -h
+RUN $(which python) -c "import brian2"
+RUN $(which python) run_simulation.py -h
 RUN make -h
 RUN cmake -h
 
@@ -16,8 +19,8 @@ RUN cmake -h
 ## Now add any local files from your repository.
 ## As an example, we add a Python package into
 ## the environment.
-COPY . /pkg
-RUN conda run -p /env python -m pip install --no-deps /pkg
+#COPY . /pkg
+#RUN conda run -p /env python -m pip install --no-deps /pkg
 
 # Distroless for execution
 #FROM gcr.io/distroless/base-debian10
