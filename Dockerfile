@@ -20,12 +20,16 @@ RUN groupadd --gid $USER_GID $USERNAME \
 # [Optional] Set the default user. Omit if you want to keep the default as root.
 
 COPY . .
+RUN chown -r . $USERNAME
+RUN apt install cmake # develop-tools
+
 RUN conda install conda-build
 RUN conda develop .
-RUN $(which pip) install -e .
 RUN make -h
 RUN cmake -h
 USER $USERNAME
+
+RUN $(which pip) install -e .
 
 RUN $(which python) run_simulation.py -h
 RUN $(which python) -c "import brian2"
