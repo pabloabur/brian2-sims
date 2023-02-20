@@ -1,14 +1,20 @@
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
+name: Mamba
 
-      - name: Install Conda environment from environment.yml
-        uses: mamba-org/provision-with-micromamba@main
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
 
-      # Linux and macOS
-      - name: Run Python
-        shell: bash -l {0}
-        run: |
-          python run_simulation.py -h
+  jobs:
+    test:
+      runs-on: ubuntu-latest
+      steps:
+        - uses: actions/checkout@v3
+        - name: Install Conda environment from environment.yml
+          uses: mamba-org/provision-with-micromamba@main
+        # Linux and macOS
+        - name: Run Python
+          shell: bash -l {0}
+          run: |
+            python run_simulation.py -h
