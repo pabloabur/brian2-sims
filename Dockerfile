@@ -6,7 +6,7 @@ ARG MAMBA_DOCKERFILE_ACTIVATE=1
 RUN python -c 'import uuid; print(uuid.uuid4())' > /tmp/my_uuid
 RUN python -c "import brian2"
 COPY . .
-user $MAMBA_USER
+USER $MAMBA_USER
 RUN python run_simulation.py -h
 
 #USER root
