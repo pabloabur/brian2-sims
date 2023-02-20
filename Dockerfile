@@ -18,15 +18,13 @@ RUN groupadd --gid $USER_GID $USERNAME \
 # ********************************************************
 
 # [Optional] Set the default user. Omit if you want to keep the default as root.
-
+WORKDIR jovyan
 COPY . .
 RUN chown -R jovyan .
 USER jovyan
 
 RUN conda install conda-build
 RUN conda develop .
-
-
 RUN $(which pip) install -e .
 RUN $(which python) -c "import brian2"
 
