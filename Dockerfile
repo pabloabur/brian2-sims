@@ -7,8 +7,8 @@ RUN conda install conda-build
 RUN conda develop .
 #FROM jupyter/r-notebook
 #COPY --from=conda /env /env
-
-RUN python run_simulation.py -h
+RUN $(which python3) -c "import brian2"
+RUN $(which python3) run_simulation.py -h
 RUN make -h
 RUN cmake -h
 
