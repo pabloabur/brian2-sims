@@ -1,8 +1,8 @@
 FROM condaforge/mambaforge as conda
-WORKDIR mambauser
 COPY . .
-RUN chown -R mambauser .
 USER mambauser
+WORKDIR mambauser
+
 RUN $(which pip) install -e .
 RUN $(which python) -c "import brian2"
 RUN $(which python) run_simulation.py -h
