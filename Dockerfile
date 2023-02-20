@@ -1,7 +1,7 @@
 FROM condaforge/mambaforge as conda
 #RUN /bin/bash -c "conda init bash"
 COPY . /pkg
-RUN --mount=type=cache,target=/opt/conda/pkgs mamba create --copy -p /env --file conda-linux-64.lock
+#RUN --mount=type=cache,target=/opt/conda/pkgs mamba create --copy -p /env --file conda-linux-64.lock
 RUN conda run -p /env python -m pip install --no-deps /pkg
 
 FROM jupyter/r-notebook
