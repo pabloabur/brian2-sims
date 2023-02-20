@@ -20,8 +20,8 @@ RUN groupadd --gid $USER_GID $USERNAME \
 # [Optional] Set the default user. Omit if you want to keep the default as root.
 
 COPY . .
-RUN chown -R $USERNAME .
-USER $USERNAME
+RUN chown -R jovyan .
+USER jovyan
 
 RUN conda install conda-build
 RUN conda develop .
