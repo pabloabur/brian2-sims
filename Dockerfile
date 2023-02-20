@@ -2,14 +2,14 @@ FROM mambaorg/micromamba:1.3.1
 COPY --chown=$MAMBA_USER:$MAMBA_USER environment.yml /tmp/env.yml
 RUN micromamba install -y -n base -f /tmp/env.yml && \
     micromamba clean --all --yes
-USER mambauser
-RUN python3 -c "import brian2"
-ADD . .
-RUN python3 run_simulation.py -h
+ARG MAMBA_DOCKERFILE_ACTIVATE=1
+RUN python -c 'import uuid; print(uuid.uuid4())' > /tmp/my_uuid
+RUN python -c "import brian2"
+RUN python run_simulation.py -h
 USER root
 RUN apt install - y cmake # develop-tools
-
 RUN cmake -h
+
 #RUN conda install conda-build
 #RUN conda develop .
 #RUN make -h
