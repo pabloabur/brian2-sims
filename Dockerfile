@@ -1,8 +1,8 @@
 FROM condaforge/mambaforge
-#RUN mamba update -n base mamba conda
+RUN /bin/bash -c "conda init bash"
 COPY . $HOME
 RUN mamba env create --file environment.yml
-RUN conda env create
+RUN conda env activate
 FROM jupyter/r-notebook
 
 RUN python run_simulation.py -h
@@ -11,6 +11,7 @@ RUN cmake -h
 
 #RUN mamba install -n rnaquant --revision 1
 #mamba install -n rnaquant fastqc
+#RUN mamba update -n base mamba conda
 
 #RUN mamba activate app
 
