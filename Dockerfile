@@ -1,13 +1,10 @@
 FROM condaforge/mambaforge
 COPY environment.yml .
 COPY . $HOME
-#RUN mamba app create -f environment.yml
 
-RUN /bin/bash -c "time mamba app create -f environment.yml"
-RUN /bin/bash -c "conda activate app"
+RUN /bin/bash -c "mamba app create -f environment.yml"
 RUN /bin/bash -c "mamba activate app"
 
-#RUN conda activate app
 RUN python run_simulation.py -h
 RUN make -h
 RUN cmake -h
