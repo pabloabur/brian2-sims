@@ -1,7 +1,10 @@
-FROM condaforge/mambaforge as conda
-COPY . .
-USER mambauser
-WORKDIR mambauser
+FROM mambaorg/micromamba:1.3.1
+COPY --chown=$MAMBA_USER:$MAMBA_USER environment.yml /tmp/env.yml
+RUN micromamba install -y -n base -f /tmp/env.yaml && \
+    micromamba clean --all --yes
+RUN $(which python) -c "import brian2"
+
+
 
 RUN $(which pip) install -e .
 RUN $(which python) -c "import brian2"
@@ -13,7 +16,10 @@ RUN conda develop .
 #RUN make -h
 RUN cmake -h
 
-
+#FROM condaforge/mambaforge as conda
+#COPY . .
+#USER mambauser
+#WORKDIR mambauser
 
 ## Now add any local files from your repository.
 ## As an example, we add a Python package into
