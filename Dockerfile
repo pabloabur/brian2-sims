@@ -1,12 +1,10 @@
 FROM condaforge/mambaforge
-RUN mamba update -n base mamba conda
+#RUN mamba update -n base mamba conda
 COPY . $HOME
-RUN mamba app create -f environment.yml
-
-
-
-
+RUN mamba env create --file environment.yml
+RUN conda env create
 FROM jupyter/r-notebook
+
 RUN python run_simulation.py -h
 RUN make -h
 RUN cmake -h
