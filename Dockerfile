@@ -1,6 +1,6 @@
 FROM mambaorg/micromamba:1.3.1
 COPY --chown=$MAMBA_USER:$MAMBA_USER environment.yml /tmp/env.yml
-RUN micromamba install -y -n base -f /tmp/env.yaml && \
+RUN micromamba install -y -n base -f /tmp/env.yml && \
     micromamba clean --all --yes
 RUN $(which python) -c "import brian2"
 
