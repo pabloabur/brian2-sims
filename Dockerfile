@@ -6,5 +6,8 @@ WORKDIR $HOME
 # RUN echo $pwd
 RUN ls -ltr environment.yml
 RUN conda env create && echo "conda activate app" >> ~/.profile
-RUN Rscript requirements.R
-ENTRYPOINT /bin/python ~/jovyan/work/brian2-sims/simulations/stdp.py
+#RUN Rscript requirements.R
+ENTRYPOINT python run_simulation.py -h
+
+#simulations/stdp.py
+ 
