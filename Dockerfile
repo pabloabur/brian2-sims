@@ -1,9 +1,8 @@
 FROM condaforge/mambaforge
-COPY environment.yml .
 COPY . $HOME
-
-RUN /bin/bash -c "mamba app create -f environment.yml"
-RUN /bin/bash -c "mamba activate app"
+RUN mamba app create -f environment.yml
+# RUN /bin/bash -c "mamba app create -f environment.yml"
+RUN mamba activate app
 
 RUN python run_simulation.py -h
 RUN make -h
