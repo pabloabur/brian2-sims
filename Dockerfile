@@ -1,5 +1,5 @@
 FROM jupyter/r-notebook
-COPY . ~/jovyan/work
+COPY . ~
 # ADD . ~/jovyan/work
 
 RUN conda env create && echo "conda activate app" >> ~/.profile
