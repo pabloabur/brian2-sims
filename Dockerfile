@@ -5,11 +5,12 @@ RUN micromamba install -y -n base -f /tmp/env.yml && \
 ARG MAMBA_DOCKERFILE_ACTIVATE=1
 RUN python -c 'import uuid; print(uuid.uuid4())' > /tmp/my_uuid
 RUN python -c "import brian2"
+ADD . .
 RUN python run_simulation.py -h
 USER root
 RUN apt install - y cmake # develop-tools
 RUN cmake -h
-
+user $MAMBA_USER
 #RUN conda install conda-build
 #RUN conda develop .
 #RUN make -h
