@@ -1,4 +1,5 @@
 FROM condaforge/mambaforge as conda
+USER user
 COPY . .
 RUN conda install conda-build
 RUN conda develop .
