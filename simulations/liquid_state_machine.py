@@ -33,8 +33,41 @@ from viziphant.statistics import plot_instantaneous_rates_colormesh
 from brian2tools import brian_plot, plot_state
 import feather
 
-from sklearn.svm import LinearSVC
+from sklearn import svm, preprocessing
+from sklearn.pipeline import make_pipeline
+from sklearn.model_selection import cross_val_score, ShuffleSplit
 
+
+def compute_liquid_states(spikes, sim_times, exp_kernel, dt):
+    liquid_states = []
+    for spk_trains in spikes:
+        conv_spks = np.zeros_like(sim_times)
+        if len(spk_trains):
+            conv_spks[np.around(spk_trains/dt).astype(int)] = 1
+            conv_spks = np.convolve(conv_spks, exp_kernel)
+        liquid_states.append(conv_spks[:len(sim_times)])
+
+    return np.array(liquid_states)
+
+def sigmoid(x):
+    return (1 / (1 + np.exp(-x)))
+
+def train_elm(X_train, y_train, X_test, num_neu):
+    X_train = np.matrix(X_train)
+    y_train = np.matrix(y_train)
+    X_test = np.matrix(X_test)
+    n_features = np.shape(X_train)[1]
+    weight = np.matrix(np.random.normal(size=(num_neu, n_features)))
+    bias = np.matrix(np.random.normal(size=(1, num_neu)))
+
+    # Note broadcast happening here; there is one bias per neuron
+    H = sigmoid(X_train*weight.T + bias)
+    H_cross = np.linalg.pinv(H)
+    beta = H_cross * y_train
+
+    prediction = sigmoid(X_test*weight.T + bias) * beta
+
+    return prediction
 
 def liquid_state_machine(args):
     if args.precision == 'fp8':
@@ -49,7 +82,8 @@ def liquid_state_machine(args):
     """ =================== Inputs =================== """
     # this for mus silicium
     mus_silic = pd.read_csv(
-        'spikes.csv', names=['speaker', 'digit']+[f'ch{i}' for i in range(40)])
+        'sim_data/spikes.csv',
+        names=['speaker', 'digit']+[f'ch{i}' for i in range(40)])
     labels = mus_silic.loc[:, 'digit'].values.tolist()
     num_labels = len(np.unique(labels))
     mus_silic = mus_silic.loc[:, ~mus_silic.columns.isin(['speaker', 'digit'])].values.tolist()
@@ -170,7 +204,7 @@ def liquid_state_machine(args):
     spkmon_i = SpikeMonitor(inh_cells)
 
     # This just for classify on input directly
-    #spkmon_inp = SpikeMonitor(input_spikes)
+    spkmon_inp = SpikeMonitor(input_spikes)
 
     print('Running simulation')
     run(test_t)
@@ -178,29 +212,22 @@ def liquid_state_machine(args):
     run(sim_dur-test_t)
     if args.backend == 'cpp_standalone': device.build(args.code_path)
 
-    liquid_states = []
     sim_times = np.arange(0, sim_dur/ms+1, defaultclock.dt/ms)
     exp_kernel=[np.exp(-x/30) for x in range(1000)]
+    liquid_states = compute_liquid_states(
+        list(spkmon_e.spike_trains().values())
+        + list(spkmon_i.spike_trains().values()),
+        sim_times,
+        exp_kernel,
+        defaultclock.dt)
 
-    ## spkmon_inp for classify on input directly
-    #for spk_trains in list(spkmon_inp.spike_trains().values()):
-    for spk_trains in (list(spkmon_e.spike_trains().values())
-                       + list(spkmon_i.spike_trains().values())):
-        conv_spks = np.zeros_like(sim_times)
-        if len(spk_trains):
-            conv_spks[np.around(spk_trains/defaultclock.dt).astype(int)] = 1
-            conv_spks = np.convolve(conv_spks, exp_kernel)
-        liquid_states.append(conv_spks[:len(sim_times)])
+    classifier = svm.SVC(kernel='linear')
+    cv = ShuffleSplit(n_splits=5, test_size=test_size)
+    end_of_sample_time = [int(lbls_ts[2]/defaultclock.dt) for lbls_ts in events]
 
-    # Linear classifier
-    samples_size = len(events)
-    train_size = samples_size-test_size
-    lr = LinearSVC()
-    liquid_states = np.array(liquid_states)
-    labels_times = [int(lbls_ts[2]/defaultclock.dt) for lbls_ts in events]
-    samples = liquid_states[:, labels_times]
-    lr.fit(samples[:, :train_size].T, [x[0] for x in events][:train_size])
-    acc = lr.score(samples[:, train_size:].T, [x[0] for x in events][train_size:])
+    samples = liquid_states[:, end_of_sample_time].T
+    labels = [x[0] for x in events]
+    score = cross_val_score(classifier, samples, labels, cv=cv).mean()
 
     kernel = kernels.GaussianKernel(sigma=30*q.ms)
     temp_trains = spkmon_e.spike_trains()
@@ -212,11 +239,10 @@ def liquid_state_machine(args):
     pop_avg_rates = np.mean(pop_rates, axis=1)
 
     Metadata = {'dt': str(defaultclock.dt),
-                'args.trial': args.trial,
                 'precision': args.precision,
                 'size': args.size,
                 'trial': args.trial,
-                'accuracy': acc,
+                'accuracy': score,
                 'duration': str(sim_dur)}
     with open(args.save_path+'/metadata.json', 'w') as f:
         json.dump(Metadata, f)
@@ -263,3 +289,59 @@ def liquid_state_machine(args):
         plot_instantaneous_rates_colormesh(pop_rates)
         plt.title('Neuron rates on last trial')
         plt.savefig(f'{args.save_path}/fig3.png')
+
+        plt.figure()
+        liquid_states = compute_liquid_states(
+            list(spkmon_inp.spike_trains().values()),
+            sim_times,
+            exp_kernel,
+            defaultclock.dt)
+        c_range = np.logspace(-4, 4)
+        scores = []
+        samples = liquid_states[:, end_of_sample_time].T
+        labels = np.reshape([x[0] for x in events], (-1, 1))
+        for c in c_range:
+            classifier = make_pipeline(preprocessing.StandardScaler(),
+                                       svm.SVC(kernel='linear', C=c))
+            scores.append(
+                cross_val_score(classifier, samples, labels, cv=cv))#.mean())
+        #plt.semilogx(c_range, scores)
+        #plt.savefig(f'{args.save_path}/fig4.png')
+        from sklearn.preprocessing import OneHotEncoder
+        from sklearn.preprocessing import MinMaxScaler
+
+        enc = OneHotEncoder(categories='auto')
+        scaler = MinMaxScaler()
+
+        X_train = samples[:-test_size, :]
+        y_train = enc.fit_transform(labels[:-test_size, :]).toarray()
+        X_test = samples[-test_size:, :]
+        y_test = enc.fit_transform(labels[-test_size:, :]).toarray()
+
+        hidden_neu_range = range(1, 31)
+        ns_hidden = [i*10 for i in hidden_neu_range]
+        n_hits = [0 for _ in hidden_neu_range]
+        for i, n_hidden in enumerate(ns_hidden):
+            output = train_elm(X_train, y_train, X_test, n_hidden)
+            pred = np.array([np.argmax(output[i]) for i in range(test_size)])
+            actual = np.array([np.argmax(y_test[i]) for i in range(test_size)])
+            n_hits[i] = np.sum(pred==actual)
+        plt.plot(ns_hidden, np.array(n_hits)/test_size)
+        plt.show()
+
+        #from sklearn.datasets import load_digits
+        #from sklearn.model_selection import train_test_split
+        #digits = load_digits()
+        #X_train, X_test, y_train, y_test = train_test_split(digits.data,
+        #                                                    digits.target)
+        #y_test=enc.fit_transform(y_test[:, np.newaxis]).toarray()
+        #y_train=enc.fit_transform(y_train[:, np.newaxis]).toarray()
+        #test_size = X_test.shape[0]
+        #n_hits = [0 for _ in range(1, 11)]
+        #for i, n_hidden in enumerate(ns_hidden):
+        #    output = train_elm(X_train, y_train, X_test, n_hidden)
+        #    pred = np.array([np.argmax(output[i]) for i in range(test_size)])
+        #    actual = np.array([np.argmax(y_test[i]) for i in range(test_size)])
+        #    n_hits[i] = np.sum(pred==actual)
+        #plt.plot(ns_hidden, np.array(n_hits)/test_size)
+        #plt.show()
