@@ -8,4 +8,7 @@ RUN python -c "import brian2"
 COPY . .
 USER $MAMBA_USER
 RUN python run_simulation.py -h
+RUN python run_simulation.py --backend cpp_standalone models
+
+
 #RUN apt install -y r-base
