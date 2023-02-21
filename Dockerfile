@@ -8,4 +8,5 @@ RUN python -c "import brian2"
 COPY . .
 USER $MAMBA_USER
 RUN python run_simulation.py -h
-#RUN apt install -y r-base
+RUN apk update
+#RUN apk install r-base
