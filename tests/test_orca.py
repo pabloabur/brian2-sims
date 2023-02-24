@@ -25,8 +25,8 @@ DEFAULT_FUNCTIONS.update({'stochastic_decay': stochastic_decay,
                           'fp8_smaller_than': fp8_smaller_than,
                           'deterministic_decay': deterministic_decay})
 
-prefs.codegen.target = "numpy"
-#set_device('cpp_standalone')
+#prefs.codegen.target = "numpy"
+set_device('cpp_standalone')
 
 class TestOrca(unittest.TestCase):
 
