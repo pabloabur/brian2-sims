@@ -15,6 +15,8 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     - name: Build the Docker image
-      run: docker build . --tag simple_build_and_run
-    - name: run the bothersome stdp file
-      run: docker run simple_build_and_run
+      run: docker build -t app .
+    - name: run test
+      run: docker run -it --rm app -v $(pwd)/simulations:/tmp/simulations:ro \
+                  -v $(pwd)/sim_data:/tmp/sim_data app \
+                  python -m unittest tests/test_orca.py

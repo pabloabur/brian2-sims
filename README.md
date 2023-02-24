@@ -1,22 +1,17 @@
 [![Docker Image CI](https://github.com/pabloabur/brian2-sims/actions/workflows/docker-image.yml/badge.svg)](https://github.com/pabloabur/brian2-sims/actions/workflows/docker-image.yml)
 
 # brian2-sims
-
-[![Docker Image CI](https://github.com/fun-zoological-computing/brian2-sims/actions/workflows/docker-image.yml/badge.svg)](https://github.com/fun-zoological-computing/brian2-sims/actions/workflows/docker-image.yml)
-
-Install via `pip install -e .`. Also use requirements.txt to get dependencies. TODO: pip install -r requirements.txt instead? Seems to work
-
-TODO: this needs double chekcing
-If you are working on a remote server, conda might be a better option when linking other libraries/resources (e.g. C++). In that case, you can install miniconda and create my_env.yaml with the content
+First build container with 
 
 ```
-name: my_env
-channels:
-        - defaults
-dependencies:
-        - pip
-        - pip:
-                - -r requirements.txt
+docker build -t app .
 ```
 
-Install conda-build with `conda install conda-build`, and run `conda develop .`
+then run it with 
+```
+docker run -it --rm app -v $(pwd)/simulations:/tmp/simulations:ro -v $(pwd)/sim_data:/tmp/sim_data
+```
+
+Type `python run_simulation -h` to see simulations available and their options.
+
+We used conda-based environment because if you are working on a remote server, conda might be a better option when linking other libraries/resources (e.g. C++).
