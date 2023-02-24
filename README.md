@@ -9,7 +9,7 @@ docker build -t app .
 
 then run it with 
 ```
-docker run -it --rm app -v $(pwd)/simulations:/tmp/simulations:ro -v $(pwd)/sim_data:/tmp/sim_data
+docker run -it --rm -v $(pwd)/simulations:/tmp/simulations:ro -v $(pwd)/sim_data:/tmp/sim_data app
 ```
 
 Type `python run_simulation -h` to see simulations available and their options.
