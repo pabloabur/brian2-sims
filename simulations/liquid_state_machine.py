@@ -69,6 +69,27 @@ def train_elm(X_train, y_train, X_test, num_neu):
 
     return prediction
 
+def test_elm():
+    ''' Function to test performance of ELM used. A simple dataset such as 
+    NIST is solved with high accuracy (close to 1).
+    '''
+    from sklearn.datasets import load_digits
+    from sklearn.model_selection import train_test_split
+    digits = load_digits()
+    X_train, X_test, y_train, y_test = train_test_split(digits.data,
+                                                        digits.target)
+    y_test = enc.fit_transform(y_test[:, np.newaxis]).toarray()
+    y_train = enc.fit_transform(y_train[:, np.newaxis]).toarray()
+    test_size = X_test.shape[0]
+    n_hits = [0 for _ in range(1, 11)]
+    for i, n_hidden in enumerate(ns_hidden):
+        output = train_elm(X_train, y_train, X_test, n_hidden)
+        pred = np.array([np.argmax(output[i]) for i in range(test_size)])
+        actual = np.array([np.argmax(y_test[i]) for i in range(test_size)])
+        n_hits[i] = np.sum(pred==actual)
+    plt.plot(ns_hidden, np.array(n_hits)/test_size)
+    plt.savefig('./fig_test.png')
+
 def liquid_state_machine(args):
     if args.precision == 'fp8':
         liquid_neu = fp8LIF
@@ -82,7 +103,7 @@ def liquid_state_machine(args):
     """ =================== Inputs =================== """
     # this for mus silicium
     mus_silic = pd.read_csv(
-        'sim_data/spikes.csv',
+        'datasets/spikes.csv',
         names=['speaker', 'digit']+[f'ch{i}' for i in range(40)])
     labels = mus_silic.loc[:, 'digit'].values.tolist()
     num_labels = len(np.unique(labels))
@@ -271,6 +292,43 @@ def liquid_state_machine(args):
          'type': ['exc' for _ in range(Ne)] + ['inh' for _ in range(Ne, Nt)]})
     feather.write_dataframe(nodes, f'{args.save_path}/nodes.feather')
 
+    liquid_states = compute_liquid_states(
+        list(spkmon_inp.spike_trains().values()),
+        sim_times,
+        exp_kernel,
+        defaultclock.dt)
+    c_range = np.logspace(-4, 4)
+    scores = []
+    samples = liquid_states[:, end_of_sample_time].T
+    labels = np.reshape([x[0] for x in events], (-1, 1))
+    for c in c_range:
+        classifier = make_pipeline(svm.SVC(kernel='linear', C=c))
+        scores.append(
+            cross_val_score(classifier, samples, labels, cv=cv).mean())
+    lin_acc = pd.DataFrame({
+        'regularization': c_range,
+        'score': scores})
+    feather.write_dataframe(lin_acc, f'{args.save_path}/linear_acc.feather')
+
+    enc = preprocessing.OneHotEncoder(categories='auto')
+    X_train = samples[:-test_size, :]
+    y_train = enc.fit_transform(labels[:-test_size, :]).toarray()
+    X_test = samples[-test_size:, :]
+    y_test = enc.fit_transform(labels[-test_size:, :]).toarray()
+
+    hidden_neu_range = range(1, 41)
+    ns_hidden = [i*10 for i in hidden_neu_range]
+    n_hits = [0 for _ in hidden_neu_range]
+    for i, n_hidden in enumerate(ns_hidden):
+        output = train_elm(X_train, y_train, X_test, n_hidden)
+        pred = np.array([np.argmax(output[i]) for i in range(test_size)])
+        actual = np.array([np.argmax(y_test[i]) for i in range(test_size)])
+        n_hits[i] = np.sum(pred==actual)
+    elm_acc = pd.DataFrame({
+        'size': ns_hidden,
+        'score': np.array(n_hits)/test_size})
+    feather.write_dataframe(elm_acc, f'{args.save_path}/elm_acc.feather')
+
     if not args.quiet:
         fig, ax1 = plt.subplots()
         ax2 = ax1.twinx()
@@ -291,57 +349,9 @@ def liquid_state_machine(args):
         plt.savefig(f'{args.save_path}/fig3.png')
 
         plt.figure()
-        liquid_states = compute_liquid_states(
-            list(spkmon_inp.spike_trains().values()),
-            sim_times,
-            exp_kernel,
-            defaultclock.dt)
-        c_range = np.logspace(-4, 4)
-        scores = []
-        samples = liquid_states[:, end_of_sample_time].T
-        labels = np.reshape([x[0] for x in events], (-1, 1))
-        for c in c_range:
-            classifier = make_pipeline(preprocessing.StandardScaler(),
-                                       svm.SVC(kernel='linear', C=c))
-            scores.append(
-                cross_val_score(classifier, samples, labels, cv=cv))#.mean())
-        #plt.semilogx(c_range, scores)
-        #plt.savefig(f'{args.save_path}/fig4.png')
-        from sklearn.preprocessing import OneHotEncoder
-        from sklearn.preprocessing import MinMaxScaler
+        plt.semilogx(c_range, scores)
+        plt.savefig(f'{args.save_path}/fig4.png')
 
-        enc = OneHotEncoder(categories='auto')
-        scaler = MinMaxScaler()
-
-        X_train = samples[:-test_size, :]
-        y_train = enc.fit_transform(labels[:-test_size, :]).toarray()
-        X_test = samples[-test_size:, :]
-        y_test = enc.fit_transform(labels[-test_size:, :]).toarray()
-
-        hidden_neu_range = range(1, 31)
-        ns_hidden = [i*10 for i in hidden_neu_range]
-        n_hits = [0 for _ in hidden_neu_range]
-        for i, n_hidden in enumerate(ns_hidden):
-            output = train_elm(X_train, y_train, X_test, n_hidden)
-            pred = np.array([np.argmax(output[i]) for i in range(test_size)])
-            actual = np.array([np.argmax(y_test[i]) for i in range(test_size)])
-            n_hits[i] = np.sum(pred==actual)
+        plt.figure()
         plt.plot(ns_hidden, np.array(n_hits)/test_size)
-        plt.show()
-
-        #from sklearn.datasets import load_digits
-        #from sklearn.model_selection import train_test_split
-        #digits = load_digits()
-        #X_train, X_test, y_train, y_test = train_test_split(digits.data,
-        #                                                    digits.target)
-        #y_test=enc.fit_transform(y_test[:, np.newaxis]).toarray()
-        #y_train=enc.fit_transform(y_train[:, np.newaxis]).toarray()
-        #test_size = X_test.shape[0]
-        #n_hits = [0 for _ in range(1, 11)]
-        #for i, n_hidden in enumerate(ns_hidden):
-        #    output = train_elm(X_train, y_train, X_test, n_hidden)
-        #    pred = np.array([np.argmax(output[i]) for i in range(test_size)])
-        #    actual = np.array([np.argmax(y_test[i]) for i in range(test_size)])
-        #    n_hits[i] = np.sum(pred==actual)
-        #plt.plot(ns_hidden, np.array(n_hits)/test_size)
-        #plt.show()
+        plt.savefig(f'{args.save_path}/fig5.png')
