@@ -17,4 +17,4 @@ jobs:
     - name: Build the Docker image
       run: docker build -t app .
     - name: run test
-      run: docker run --rm -v $(pwd)/simulations:/tmp/simulations:ro -v $(pwd)/sim_data:/tmp/sim_data python -m unittest tests/test_orca.py
+      run: docker run --rm -v $(pwd)/simulations:/tmp/simulations:ro -v $(pwd)/sim_data:/tmp/sim_data app python -m unittest tests/test_orca.py

@@ -7,7 +7,7 @@ import unittest
 import numpy as np
 
 from brian2 import SpikeGeneratorGroup, run, ms, defaultclock, prefs, \
-    StateMonitor, set_device, device, DEFAULT_FUNCTIONS
+    StateMonitor, set_device, get_device, device, DEFAULT_FUNCTIONS
 
 from brian2tools import brian_plot
 
@@ -25,14 +25,14 @@ DEFAULT_FUNCTIONS.update({'stochastic_decay': stochastic_decay,
                           'fp8_smaller_than': fp8_smaller_than,
                           'deterministic_decay': deterministic_decay})
 
-#prefs.codegen.target = "numpy"
-set_device('cpp_standalone')
+#TODO not working with numpy prefs.codegen.target = "numpy"
+set_device('cpp_standalone', build_on_run=False)
 
 class TestOrca(unittest.TestCase):
 
     def test_addition(self):
         device.reinit()
-        device.activate()
+        device.activate(build_on_run=False)
         defaultclock.dt = 1*ms
 
         # Each synapse represents one test: g <- weight + g
@@ -56,6 +56,7 @@ class TestOrca(unittest.TestCase):
         syn = create_synapses(inp, neu, syn, raise_warning=True)
 
         run(3*ms)
+        device.build('.test_code/')
         res = neu.g[:]
         for i in range(len(res)):
             self.assertEqual(res[i], gn[i], f'{ws[i]}+{g0[i]} should be '
@@ -63,7 +64,7 @@ class TestOrca(unittest.TestCase):
 
     def test_multiplication(self):
         device.reinit()
-        device.activate()
+        device.activate(build_on_run=False)
         defaultclock.dt = 1*ms
 
         # Each synapse represents one test: g <- weight + g
@@ -90,6 +91,7 @@ class TestOrca(unittest.TestCase):
         syn = create_synapses(inp, neu, syn, raise_warning=True)
 
         run(3*ms)
+        device.build('.test_code/')
         res = neu.g[:]
         for i in range(len(res)):
             self.assertEqual(res[i], gn[i], f'{ws[i]}*{w0[i]} should be '
