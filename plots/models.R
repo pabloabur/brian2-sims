@@ -40,7 +40,7 @@ time_ref0 <- 500
 time_ref1 <- 25
 
 create_plot1 <- function(traces, t){
-    new_strip_label <- as_labeller(c(`gtot`='PSC', `vm`='Vm'))
+    new_strip_label <- as_labeller(c(`gtot`='PSP', `vm`='Vm'))
     p <- traces %>%
         filter(time_ms>=t+time_ref0 & time_ms<=t+time_ref0+time_ref1) %>%
         ggplot(aes(x=time_ms)) +
