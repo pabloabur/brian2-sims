@@ -97,7 +97,10 @@ def sleep_normalization(args):
     silence = None
 
     # for emulating sleep
-    silence = {'iteration': [200, 400, 600, 800], 'duration': [60000, 60000, 60000, 60000]}
+    #sleep_init = [200, 400, 600, 800]
+    sleep_init = [100, 200, 300, 400, 500, 600, 700, 800]
+    sleep_duration = [60000 for _ in sleep_init]
+    silence = {'iteration': sleep_init, 'duration': sleep_duration}
 
     input_indices, input_times, events = create_testbench(sequences,
                                                           labels,
@@ -147,24 +150,20 @@ def sleep_normalization(args):
     # for emulating sleep
     # TODO timestamp and pattern with label to create_testbench? to be inserted into testbench
     # TODO sleep cycles (check ~/test.py)
-    sleep_time1 = events[200][2]
-    wake_time1 = events[200+1][1]
-    sleep_time2 = events[400][2]
-    wake_time2 = events[400+1][1]
-    sleep_time3 = events[600][2]
-    wake_time3 = events[600+1][1]
-    sleep_time4 = events[800][2]
-    wake_time4 = events[800+1][1]
+    sleep_time = [events[x][2] for x in sleep_init]
+    wake_time = [events[x+1][1] for x in sleep_init]
     if args.precision == 'fp64':
-        e_neu_model.modify_model(
-            'model',
-            'Iconst = 0*pA + 200*pA*int(t>sleep_time1)*int(t<wake_time1) + 200*pA*int(t>sleep_time2)*int(t<wake_time2) + 200*pA*int(t>sleep_time3)*int(t<wake_time3) + 200*pA*int(t>sleep_time4)*int(t<wake_time4) : ampere',
-            old_expr='Iconst : ampere')
+        current_equation = 'Iconst = 0*pA'
     else:
-        e_neu_model.modify_model(
-            'model',
-            'Iconst = 0 + 200*pA*int(t>sleep_time1)*int(t<wake_time1) + 200*pA*int(t>sleep_time2)*int(t<wake_time2) + 200*pA*int(t>sleep_time3)*int(t<wake_time3) + 200*pA*int(t>sleep_time4)*int(t<wake_time4) : ampere',
-            old_expr='Iconst : ampere')
+        current_equation = 'Iconst = 0'
+    for st, wt in zip(sleep_time, wake_time):
+        st_string = st/defaultclock.dt
+        wt_string = wt/defaultclock.dt
+        current_equation += f' + 200*pA*int(t>{st_string}*ms)*int(t<{wt_string}*ms)'
+    current_equation += ' : ampere'    
+    e_neu_model.modify_model('model',
+                             current_equation,
+                             old_expr='Iconst : ampere')
     del e_neu_model.parameters['Iconst']
 
     cells = create_neurons(Nt, e_neu_model)
@@ -221,10 +220,15 @@ def sleep_normalization(args):
     e_neu_model.model += 'incoming_weights : volt\n'
 
     # for emulating sleep
-    e_neu_model.modify_model(
-        'model',
-        'Iconst = 0*pA + 200*pA*int(t>sleep_time1)*int(t<wake_time1) + 200*pA*int(t>sleep_time2)*int(t<wake_time2) + 200*pA*int(t>sleep_time3)*int(t<wake_time3) + 200*pA*int(t>sleep_time4)*int(t<wake_time4) : ampere',
-        old_expr='Iconst : ampere')
+    current_equation = 'Iconst = 0*pA'
+    for st, wt in zip(sleep_time, wake_time):
+        st_string = st/defaultclock.dt
+        wt_string = wt/defaultclock.dt
+        current_equation += f' + 200*pA*int(t>{st_string}*ms)*int(t<{wt_string}*ms)'
+    current_equation += ' : ampere'    
+    e_neu_model.modify_model('model',
+                             current_equation,
+                             old_expr='Iconst : ampere')
     del e_neu_model.parameters['Iconst']
 
     readout = create_neurons(num_labels, e_neu_model, name='readout')
@@ -359,19 +363,19 @@ def sleep_normalization(args):
     e_syn_model.modify_model('connection', targets, key='j')
 
     # for emulating sleep
-    e_syn_model.on_post += 'w_plast = w_plast - (int(Iconst_post>0*pA)*int(Ca_post>5)*mV*.002) + int(Iconst_post>0*pA)*int(Ca_post<3)*mV*.002\n'
+    e_syn_model.on_post += 'w_plast = w_plast - (int(Iconst_post>0*pA)*int(Ca_post>5)*mV*.00005) + int(Iconst_post>0*pA)*int(Ca_post<4.5)*mV*.00005\n'
     e_syn_model.modify_model(
         'on_pre',
-        'w_plast = clip(w_plast - int(Iconst_post==0*pA)*(w_plast/mV)*eta*j_trace, 0*volt, w_max)',
+        'w_plast = clip(w_plast - int(Iconst_post==0*pA)*eta*j_trace, 0*volt, w_max)',
         old_expr='w_plast = clip(w_plast - eta*j_trace, 0*volt, w_max)')
     e_syn_model.modify_model(
         'on_post',
-        'w_plast = clip(w_plast + int(Iconst_post==0*pA)*((w_max-w_plast)/mV)*eta*i_trace, 0*volt, w_max)\n',
+        'w_plast = clip(w_plast + int(Iconst_post==0*pA)*eta*i_trace, 0*volt, w_max)\n',
         old_expr='w_plast = clip(w_plast + eta*i_trace, 0*volt, w_max)\n')
 
     #e_syn_model.print_model()
     e_syn_model.modify_model('parameters', 'clip(1 + .1*randn(), 0, inf)*mV', key='w_plast')
-    e_syn_model.modify_model('namespace', 0.001*mV, key='eta')
+    e_syn_model.modify_model('namespace', 0.005*mV, key='eta')
     exc_readout = create_synapses(exc_cells, readout, e_syn_model,
                                   name='exc_readout')
     # only if hSTDP is used
@@ -558,9 +562,10 @@ def sleep_normalization(args):
         brian_plot(spkmon_ro, axes=ax3)
         ax0.vlines((test_t)/ms, 0, 1,
                    transform=ax0.get_xaxis_transform(), colors='r')
-        brian_plot(spkmon_e, axes=ax1)
-        ax2.plot(input_times/ms, input_indices, '.')
-        plt.savefig(f'{args.save_path}/fig1.png')
+        brian_plot(spkmon_e, axes=ax2)
+        ax1.plot(input_times/ms, input_indices, '.')
+        #plt.savefig(f'{args.save_path}/fig1.png')
+        plt.show()
 
         fig, ax1 = plt.subplots()
         ax2 = ax1.twinx()
@@ -575,46 +580,46 @@ def sleep_normalization(args):
         plt.title('Neuron rates on last trial')
         plt.savefig(f'{args.save_path}/fig3.png')
 
-        output_spikes = pd.DataFrame(
-            {'time_ms': np.array(spkmon_ro.t/defaultclock.dt),
-             'id': np.array(spkmon_ro.i)})
-        feather.write_dataframe(output_spikes, f'{args.save_path}/output_spikes.feather')
+        #output_spikes = pd.DataFrame(
+        #    {'time_ms': np.array(spkmon_ro.t/defaultclock.dt),
+        #     'id': np.array(spkmon_ro.i)})
+        #feather.write_dataframe(output_spikes, f'{args.save_path}/output_spikes.feather')
 
-        temp_time, temp_Vm, temp_Vthr, temp_id = [], [], [], []
-        for idx in range(readout.N):
-            temp_time.extend(sttmon_ro.t/defaultclock.dt)
-            temp_Vm.extend(sttmon_ro.Vm[idx]/mV)
-            temp_Vthr.extend(sttmon_ro.Vthr[idx]/mV)
-            temp_id.extend([idx for _ in range(len(sttmon_ro.Vm[idx]))])
-        output_traces = pd.DataFrame({'time_ms': temp_time,
-                                      'Vm_mV': temp_Vm,
-                                      'Vthr_mV': temp_Vthr,
-                                      'id': temp_id})
-        feather.write_dataframe(output_traces, f'{args.save_path}/output_traces.feather')
+        #temp_time, temp_Vm, temp_Vthr, temp_id = [], [], [], []
+        #for idx in range(readout.N):
+        #    temp_time.extend(sttmon_ro.t/defaultclock.dt)
+        #    temp_Vm.extend(sttmon_ro.Vm[idx]/mV)
+        #    temp_Vthr.extend(sttmon_ro.Vthr[idx]/mV)
+        #    temp_id.extend([idx for _ in range(len(sttmon_ro.Vm[idx]))])
+        #output_traces = pd.DataFrame({'time_ms': temp_time,
+        #                              'Vm_mV': temp_Vm,
+        #                              'Vthr_mV': temp_Vthr,
+        #                              'id': temp_id})
+        #feather.write_dataframe(output_traces, f'{args.save_path}/output_traces.feather')
 
-        input_spikes = pd.DataFrame(
-            {'time_ms': input_times/defaultclock.dt,
-             'id': input_indices})
-        feather.write_dataframe(input_spikes, f'{args.save_path}/input_spikes.feather')
+        #input_spikes = pd.DataFrame(
+        #    {'time_ms': input_times/defaultclock.dt,
+        #     'id': input_indices})
+        #feather.write_dataframe(input_spikes, f'{args.save_path}/input_spikes.feather')
 
-        rec_spikes = pd.DataFrame(
-            {'time_ms': np.array(spkmon_e.t/defaultclock.dt),
-             'id': np.array(spkmon_e.i)})
-        feather.write_dataframe(rec_spikes, f'{args.save_path}/rec_spikes.feather')
+        #rec_spikes = pd.DataFrame(
+        #    {'time_ms': np.array(spkmon_e.t/defaultclock.dt),
+        #     'id': np.array(spkmon_e.i)})
+        #feather.write_dataframe(rec_spikes, f'{args.save_path}/rec_spikes.feather')
 
-        pd_events = np.array([[ev[0], ev[1]/defaultclock.dt, ev[2]/defaultclock.dt] for ev in events])
-        pd_events = pd.DataFrame(pd_events, columns=['label', 'tstart_ms', 'tstop_ms'])
-        feather.write_dataframe(pd_events, f'{args.save_path}/events_spikes.feather')
+        #pd_events = np.array([[ev[0], ev[1]/defaultclock.dt, ev[2]/defaultclock.dt] for ev in events])
+        #pd_events = pd.DataFrame(pd_events, columns=['label', 'tstart_ms', 'tstop_ms'])
+        #feather.write_dataframe(pd_events, f'{args.save_path}/events_spikes.feather')
 
-        links = pd.DataFrame(
-            {'i': np.concatenate((exc_exc.i, exc_inh.i, inh_inh.i+Ne, inh_exc.i+Ne)),
-             'j': np.concatenate((exc_exc.j, exc_inh.j+Ne, inh_inh.j+Ne, inh_exc.j))
-             })
-        feather.write_dataframe(links, f'{args.save_path}/links.feather')
-        nodes = pd.DataFrame(
-            {'neu_id': [x for x in range(Nt)],
-             'type': ['exc' for _ in range(Ne)] + ['inh' for _ in range(Ne, Nt)]})
-        feather.write_dataframe(nodes, f'{args.save_path}/nodes.feather')
+        #links = pd.DataFrame(
+        #    {'i': np.concatenate((exc_exc.i, exc_inh.i, inh_inh.i+Ne, inh_exc.i+Ne)),
+        #     'j': np.concatenate((exc_exc.j, exc_inh.j+Ne, inh_inh.j+Ne, inh_exc.j))
+        #     })
+        #feather.write_dataframe(links, f'{args.save_path}/links.feather')
+        #nodes = pd.DataFrame(
+        #    {'neu_id': [x for x in range(Nt)],
+        #     'type': ['exc' for _ in range(Ne)] + ['inh' for _ in range(Ne, Nt)]})
+        #feather.write_dataframe(nodes, f'{args.save_path}/nodes.feather')
 
         # for emulating sleep
         plt.figure()
