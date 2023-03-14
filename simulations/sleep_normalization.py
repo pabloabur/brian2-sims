@@ -97,8 +97,8 @@ def sleep_normalization(args):
     silence = None
 
     # for emulating sleep
-    #sleep_init = [200, 400, 600, 800]
-    sleep_init = [100, 200, 300, 400, 500, 600, 700, 800]
+    #TODO sleep_init = [200, 400, 600, 800]
+    sleep_init = [100, 200, 300, 400, 500, 600, 700, 800, 900]#, 1000, 1100, 1200, 1300, 1400, 1500, 1600]
     sleep_duration = [60000 for _ in sleep_init]
     silence = {'iteration': sleep_init, 'duration': sleep_duration}
 
@@ -112,7 +112,7 @@ def sleep_normalization(args):
     input_times = np.array(input_times) * ms
     num_channels = int(max(input_indices) + 1)
     sim_dur = events[-1][2] + inter_seq_interval*ms
-    test_size = 1100
+    test_size = 100#TODO 1100
     test_t = events[-test_size][2] + inter_seq_interval*ms
     input_spikes = SpikeGeneratorGroup(num_channels,
                                        input_indices,
@@ -363,14 +363,13 @@ def sleep_normalization(args):
     e_syn_model.modify_model('connection', targets, key='j')
 
     # for emulating sleep
-    e_syn_model.on_post += 'w_plast = w_plast - (int(Iconst_post>0*pA)*int(Ca_post>5)*mV*.00005) + int(Iconst_post>0*pA)*int(Ca_post<4.5)*mV*.00005\n'
     e_syn_model.modify_model(
         'on_pre',
         'w_plast = clip(w_plast - int(Iconst_post==0*pA)*eta*j_trace, 0*volt, w_max)',
         old_expr='w_plast = clip(w_plast - eta*j_trace, 0*volt, w_max)')
     e_syn_model.modify_model(
         'on_post',
-        'w_plast = clip(w_plast + int(Iconst_post==0*pA)*eta*i_trace, 0*volt, w_max)\n',
+        'w_plast = clip(w_plast + int(Iconst_post==0*pA)*eta*i_trace - int(Iconst_post>0*pA)*int(Ca_post>5)*mV*.00005 + int(Iconst_post>0*pA)*int(Ca_post<4.5)*mV*.00005, 0*volt, w_max)\n',
         old_expr='w_plast = clip(w_plast + eta*i_trace, 0*volt, w_max)\n')
 
     #e_syn_model.print_model()
@@ -526,8 +525,6 @@ def sleep_normalization(args):
     lr.fit(samples[:, :train_size].T, [x[0] for x in events][:train_size])
     acc = lr.score(samples[:, train_size:].T, [x[0] for x in events][train_size:])
     print(f'Accuracy was {acc}')
-    with open(f'size_{args.size}-FP_{args.precision}-trial_{args.trial}.txt', 'w') as f:
-        f.write(f'{acc:.2f}')
 
     temp_trains = spkmon_e.spike_trains()
     spk_trains = [neo.SpikeTrain(temp_trains[x]/ms, t_stop=sim_dur/ms, units='ms')
@@ -567,18 +564,18 @@ def sleep_normalization(args):
         #plt.savefig(f'{args.save_path}/fig1.png')
         plt.show()
 
-        fig, ax1 = plt.subplots()
-        ax2 = ax1.twinx()
-        ax2.plot(pop_rates.times, pop_avg_rates, color='red')
-        brian_plot(spkmon_e, marker=',', color='black', axes=ax1)
-        ax1.set_xlabel(f'time ({pop_rates.times.dimensionality.latex})')
-        ax1.set_ylabel('neuron number')
-        ax2.set_ylabel(f'rate ({pop_rates.dimensionality})')
-        plt.savefig(f'{args.save_path}/fig2.png')
+        #fig, ax1 = plt.subplots()
+        #ax2 = ax1.twinx()
+        #ax2.plot(pop_rates.times, pop_avg_rates, color='red')
+        #brian_plot(spkmon_e, marker=',', color='black', axes=ax1)
+        #ax1.set_xlabel(f'time ({pop_rates.times.dimensionality.latex})')
+        #ax1.set_ylabel('neuron number')
+        #ax2.set_ylabel(f'rate ({pop_rates.dimensionality})')
+        #plt.savefig(f'{args.save_path}/fig2.png')
 
-        plot_instantaneous_rates_colormesh(pop_rates)
-        plt.title('Neuron rates on last trial')
-        plt.savefig(f'{args.save_path}/fig3.png')
+        #plot_instantaneous_rates_colormesh(pop_rates)
+        #plt.title('Neuron rates on last trial')
+        #plt.savefig(f'{args.save_path}/fig3.png')
 
         #output_spikes = pd.DataFrame(
         #    {'time_ms': np.array(spkmon_ro.t/defaultclock.dt),
@@ -635,5 +632,10 @@ def sleep_normalization(args):
         plt.figure()
         brian_plot(sttmon_w[np.where(targets==1)[0]])
         plt.savefig(f'{args.save_path}/fig7.png')
+
+        plt.figure()
+        plt.plot(np.average(sttmon_w[np.where(targets==0)[0]].w_plast, axis=0))
+        plt.plot(np.average(sttmon_w[np.where(targets==1)[0]].w_plast, axis=0))
+        plt.savefig(f'{args.save_path}/fig8.png')
 
         print(readout.incoming_weights)
