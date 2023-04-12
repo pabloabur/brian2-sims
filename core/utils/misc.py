@@ -420,13 +420,11 @@ def fp8_multiply(num1, num2, _vectorisation_idx):
 
     # Normalization of result is done after multiplication, according
     # to leading zeros of multiplicands. Note that if multiplicand is normal,
-    # no need to shift result e.g. 1.000*0.001=1000 => 1000>>2 = 100000
+    # no need to shift result e.g. 1.000*0.001=1000 => 1000<<3 = 1.000000
     # Result occupies N_BITS bits in the form of cnr1r2...r6
-    num_leading_zero1 = (get_leading_zeros(int_repr1_abs)
-                         - (SIGN_WIDTH + EXP_WIDTH - val1_normal))
+    num_leading_zero1 = get_leading_zeros(int_repr1_abs) - EXP_WIDTH
     result = np.where(val1_normal == 0, result << num_leading_zero1, result)
-    num_leading_zero2 = (get_leading_zeros(int_repr2_abs)
-                         - (SIGN_WIDTH + EXP_WIDTH - val2_normal))
+    num_leading_zero2 = get_leading_zeros(int_repr2_abs) - EXP_WIDTH
     result = np.where(val2_normal == 0, result << num_leading_zero2, result)
     carry = result >> (N_BITS-1)
 
@@ -437,8 +435,8 @@ def fp8_multiply(num1, num2, _vectorisation_idx):
                        - num_leading_zero1 - num_leading_zero2
                        + (1 - BIAS) + carry)
 
-    # In hardware, a slightly larger exponent range (herein 2 extra bits) to
-    # identify underflows is needed.
+    # In hardware, a slightly larger exponent range (herein 1 extra bit) to
+    # handle subnormals
     aux_ind = result_exponent >> EXP_WIDTH+1 != 0
     result[aux_ind] >>= -result_exponent[aux_ind]
     # Note that no sticky bits are computed from eliminated bits
@@ -528,8 +526,8 @@ int fp8_multiply(int num1, int num2, int _vectorisation_idx){
 
     // Normalization of result is done after multiplication, according
     // to leading zeros of multiplicands. Note that if multiplicand is normal,
-    // no need to shift result e.g. 1.000*0.001=1000 => 1000>>2 = 100000
-    num_leading_zero1 = num_leading_zero1 - (SIGN_WIDTH + EXP_WIDTH - is_normal1);
+    // no need to shift result e.g. 1.000*0.001=1000 => 1000<<3 = 1.000000
+    num_leading_zero1 = num_leading_zero1 - EXP_WIDTH;
     if (!is_normal1) result <<= num_leading_zero1;
 
     // Code to extract number of leading bits
@@ -542,7 +540,7 @@ int fp8_multiply(int num1, int num2, int _vectorisation_idx){
         if(aux_int_repr<=0x7F) {aux_int_repr<<=1; num_leading_zero2+=1;}
     }
 
-    num_leading_zero2 = num_leading_zero2 - (SIGN_WIDTH + EXP_WIDTH - is_normal2);
+    num_leading_zero2 = num_leading_zero2 - EXP_WIDTH;
     if (!is_normal2) result <<= num_leading_zero2;
     carry = result >> (N_BITS-1);
 
@@ -553,8 +551,8 @@ int fp8_multiply(int num1, int num2, int _vectorisation_idx){
                   - num_leading_zero1 - num_leading_zero2
                   + (1 - BIAS) + carry);
 
-    // In hardware, a slightly larger exponent range (herein 2 extra bits) to
-    // identify underflows is needed.
+    // In hardware, a slightly larger exponent range (herein 1 extra bit) to
+    // handle subnormals
     if((result_exp >> (EXP_WIDTH + 1)) != 0){
         result >>= -result_exp;
         // Note that no sticky bits are computed from eliminated bits
