@@ -8,17 +8,15 @@ from brian2 import *
 
 import pandas as pd
 import numpy as np
-import scipy.stats as sc
 import feather
 import json
 
 import gc
-from datetime import datetime
 
 from core.equations.neurons.fp8LIF import fp8LIF
 from core.equations.synapses.fp8CUBA import fp8CUBA
 from core.builder.groups_builder import create_synapses, create_neurons
-from core.utils.misc import minifloat2decimal, decimal2minifloat
+from core.utils.misc import decimal2minifloat
 from core.utils.prepare_models import generate_connection_indices
 
 
@@ -35,7 +33,7 @@ def fp8_potjans_diesmann(args):
     rng = np.random.default_rng()
 
     """ =================== Parameters =================== """
-    ###############################################################################
+    ###########################################################################
     # Population size per layer
     #          2/3e   2/3i   4e    4i    5e    5i    6e     6i    Th
     n_layer = [20683, 5834, 21915, 5479, 4850, 1065, 14395, 2948, 902]
@@ -91,7 +89,7 @@ def fp8_potjans_diesmann(args):
             pre_index = randint(n_layer[c], size=nsyn)
             post_index = randint(n_layer[r], size=nsyn)
 
-            if nsyn<1:
+            if nsyn < 1:
                 pass
             else:
                 syn_model = fp8CUBA()
@@ -141,7 +139,7 @@ def fp8_potjans_diesmann(args):
                                           1, np.inf)
                     con[-1].delay = np.rint(sampled_var)*ms
 
-    bg_in  = []
+    bg_in = []
     poisson_pop = []
     syn_model = fp8CUBA()
     syn_model.connection['p'] = .03
@@ -187,7 +185,9 @@ def fp8_potjans_diesmann(args):
         net.add(thal_input, thal_con)
 
         for i, nsyn in enumerate(thal_nsyn):
-            sampled_var = np.clip(rng.normal(10*w_ex_2, 10*w_ex_2/10, nsyn), 0, 480)
+            sampled_var = np.clip(rng.normal(10*w_ex_2, 10*w_ex_2/10, nsyn),
+                                  0,
+                                  480)
             thal_con[i].weight = decimal2minifloat(sampled_var,
                                                    raise_warning=False)
         net.run(tsim*second, report='stdout')
@@ -199,22 +199,25 @@ def fp8_potjans_diesmann(args):
                          't': np.array(smon_net.t/defaultclock.dt)})
 
     # cortical layer labels: e for excitatory; i for inhibitory
-    lname = ['L23e', 'L23i', 'L4e', 'L4i', 'L5e', 'L5i','L6e', 'L6i']
+    lname = ['L23e', 'L23i', 'L4e', 'L4i', 'L5e', 'L5i', 'L6e', 'L6i']
 
     # number of neurons by layer
     n_layer = [0] + n_layer[:-1]
-    l_bins = np.cumsum(n_layer) # cumulative number of neurons by layer
+    l_bins = np.cumsum(n_layer)  # cumulative number of neurons by layer
 
     # grouping spiking times for each neuron
-    keys,values = data.sort_values(['i','t']).values.T
-    ukeys,index=np.unique(keys,True)
-    arrays=np.split(values,index[1:])
+    keys, values = data.sort_values(['i', 't']).values.T
+    ukeys, index = np.unique(keys, True)
+    arrays = np.split(values, index[1:])
 
-    spk_neuron = pd.DataFrame({'i':range(0,N),'t':[[]]*N})
-    spk_neuron.iloc[ukeys.astype(int),1] = arrays
+    spk_neuron = pd.DataFrame({'i': range(0, N), 't': [[]]*N})
+    spk_neuron.iloc[ukeys.astype(int), 1] = arrays
 
     # creating a flag to identify cortical layers
-    spk_neuron['layer'] = pd.cut(spk_neuron['i'], l_bins, labels=lname, right=False)
+    spk_neuron['layer'] = pd.cut(spk_neuron['i'],
+                                 l_bins,
+                                 labels=lname,
+                                 right=False)
     feather.write_dataframe(spk_neuron, args.save_path + 'spikes.feather')
 
     Metadata = {'dt': str(defaultclock.dt),

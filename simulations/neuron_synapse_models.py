@@ -64,8 +64,8 @@ def neuron_synapse_models(args):
     synapse_model_test.modify_model('connection', sources, key='i')
     synapse_model_test.modify_model('connection', targets, key='j')
     poisson_input_fp64 = create_synapses(poisson_pop, layer1_fp64,
-                                        synapse_model_test,
-                                        name='poisson_input_fp64')
+                                         synapse_model_test,
+                                         name='poisson_input_fp64')
     poisson_input_fp64.weight = 23.5*mV
 
     synapse_model_test2 = fp8CUBA()

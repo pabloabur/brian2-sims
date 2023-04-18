@@ -1,7 +1,6 @@
 from brian2 import PoissonGroup, SpikeMonitor, StateMonitor
-from brian2 import defaultclock, prefs, Network, collect, device, get_device,\
-        set_device, run
-from brian2 import second, Hz, ms, ohm, mA, mV, Network
+from brian2 import defaultclock, Network, device
+from brian2 import Hz, ms, mV
 
 from core.utils.misc import minifloat2decimal, decimal2minifloat
 from core.utils.prepare_models import generate_connection_indices
@@ -17,31 +16,23 @@ from core.equations.neurons.int8LIF import int8LIF
 from core.equations.synapses.int8CUBA import int8CUBA
 from core.builder.groups_builder import create_synapses, create_neurons
 
-import sys
-import os
-from datetime import datetime
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-import pickle
 import json
-import argparse
 import feather
 
-import neo
-import quantities as q
-from elephant import statistics, kernels
-from elephant.statistics import isi, cv
 
-from viziphant.statistics import plot_instantaneous_rates_colormesh
-from brian2tools import brian_plot
-
-
-# Code using orca column and standard parameters was obselete so it was removed.
-# It can still be found in predictive learning and extrapolation, bbut it should
-# be removed as well. This is because I am not creating a single motif that is to
-# be repeated somewhere else with minor modifications anymore. I am rather just
-# creating one network for each case. Previous examples can be found in previous 
+# Code using orca column and standard parameters was
+# obselete so it was removed.
+# It can still be found in predictive learning and
+# extrapolation, bbut it should
+# be removed as well. This is because I am not creating
+# a single motif that is to
+# be repeated somewhere else with minor modifications
+# anymore. I am rather just
+# creating one network for each case. Previous examples
+# can be found in previous
 # repository from gitlab
 def balanced_network(args):
     defaultclock.dt = args.timestep * ms
@@ -58,7 +49,7 @@ def balanced_network(args):
                  ['fp64_neu', 'int4_neu', 'int8_neu', 'fp8_neu'])
     for model, name in models:
         aux_model = model()
-        if name=='fp64_neu':
+        if name == 'fp64_neu':
             aux_model.model += 'gtot1 : volt\ngtot2 : volt\n'
             aux_model.modify_model('model', 'gtot = gtot0 + gtot1 + gtot2',
                                    old_expr='gtot = gtot0')
@@ -81,25 +72,25 @@ def balanced_network(args):
         aux_model.modify_model('connection', sources, key='i')
         aux_model.modify_model('connection', targets, key='j')
         rng = np.random.default_rng()
-        if name=='fp64_thal':
+        if name == 'fp64_thal':
             aux_model.modify_model('parameters',
                                    rng.normal(25, 2.5, len(sources))*mV,
                                    key='weight')
-        elif name=='int4_thal':
+        elif name == 'int4_thal':
             aux_model.modify_model('parameters',
                                    np.rint(np.clip(rng.normal(1,
                                                               .1,
                                                               len(sources)),
                                                    0, 7)),
                                    key='weight')
-        elif name=='int8_thal':
+        elif name == 'int8_thal':
             aux_model.modify_model('parameters',
                                    np.rint(np.clip(rng.normal(16,
                                                               1.6,
                                                               len(sources)),
                                                    0, 127)),
                                    key='weight')
-        elif name=='fp8_thal':
+        elif name == 'fp8_thal':
             aux_model.modify_model('parameters',
                                    decimal2minifloat(rng.normal(36,
                                                                 3.6,
@@ -131,7 +122,7 @@ def balanced_network(args):
         aux_model = model()
         aux_model.modify_model('connection', sources_e, key='i')
         aux_model.modify_model('connection', targets_e, key='j')
-        if name=='fp64_syn':
+        if name == 'fp64_syn':
             aux_model.modify_model('model',
                                    'gtot1_post',
                                    old_expr='gtot0_post')
@@ -140,15 +131,15 @@ def balanced_network(args):
                                               excitatory_weight[name]/10,
                                               len(sources_e))*mV,
                                    key='weight')
-        elif name=='fp8_syn':
+        elif name == 'fp8_syn':
             aux_model.modify_model('parameters',
                                    decimal2minifloat(
                                        rng.normal(excitatory_weight[name],
                                                   excitatory_weight[name]/10,
-                                                                len(sources_e)),
-                                                     raise_warning=False),
+                                                  len(sources_e)),
+                                       raise_warning=False),
                                    key='weight')
-        elif name=='int4_syn':
+        elif name == 'int4_syn':
             aux_model.modify_model('parameters',
                                    np.rint(np.clip(
                                        rng.normal(excitatory_weight[name],
@@ -156,7 +147,7 @@ def balanced_network(args):
                                                   len(sources_e)),
                                            0, 7)),
                                    key='weight')
-        elif name=='int8_syn':
+        elif name == 'int8_syn':
             aux_model.modify_model('parameters',
                                    np.rint(np.clip(
                                        rng.normal(excitatory_weight[name],
@@ -164,18 +155,21 @@ def balanced_network(args):
                                                   len(sources_e)),
                                            0, 127)),
                                    key='weight')
-        intra_exc.append(create_synapses(e_neu, neu, aux_model, name=name+'_e'))
+        intra_exc.append(create_synapses(e_neu,
+                                         neu,
+                                         aux_model,
+                                         name=name+'_e'))
 
         # Set negative factor of inhibitory weights
         aux_model = model()
         aux_model.modify_model('connection', sources_i, key='i')
         aux_model.modify_model('connection', targets_i, key='j')
-        if name=='fp64_syn':
+        if name == 'fp64_syn':
             aux_model.modify_model('model',
                                    'gtot2_post',
                                    old_expr='gtot0_post')
 
-        if name=='fp8_syn':
+        if name == 'fp8_syn':
             aux_model.modify_model('namespace',
                                    decimal2minifloat(-1),
                                    key='w_factor')
@@ -184,13 +178,13 @@ def balanced_network(args):
 
         # Calculates percentage of maximum weight for each case
         inhibitory_weight[name] = args.w_perc*w_max[name]
-        if name=='fp64_syn':
+        if name == 'fp64_syn':
             aux_model.modify_model('parameters',
                                    rng.normal(inhibitory_weight[name],
                                               inhibitory_weight[name]/10,
                                               len(sources_i))*mV,
                                    key='weight')
-        elif name=='fp8_syn':
+        elif name == 'fp8_syn':
             aux_model.modify_model('parameters',
                                    decimal2minifloat(
                                        rng.normal(inhibitory_weight[name],
@@ -198,24 +192,29 @@ def balanced_network(args):
                                                   len(sources_i)),
                                        raise_warning=False),
                                    key='weight')
-        elif name=='int4_syn':
-            aux_model.modify_model('parameters',
-                                   np.rint(
-                                       np.clip(rng.normal(inhibitory_weight[name],
-                                                          inhibitory_weight[name]/10,
-                                                          len(sources_i)),
-                                               0, 7)),
-                                   key='weight')
-        elif name=='int8_syn':
-            aux_model.modify_model('parameters',
-                                   np.rint(
-                                       np.clip(rng.normal(inhibitory_weight[name],
-                                                          inhibitory_weight[name]/10,
-                                                          len(sources_i)),
-                                               0, 127)),
-                                   key='weight')
+        elif name == 'int4_syn':
+            aux_model.modify_model(
+                'parameters',
+                np.rint(
+                    np.clip(rng.normal(inhibitory_weight[name],
+                                       inhibitory_weight[name]/10,
+                                       len(sources_i)),
+                            0, 7)),
+                key='weight')
+        elif name == 'int8_syn':
+            aux_model.modify_model(
+                'parameters',
+                np.rint(
+                    np.clip(rng.normal(inhibitory_weight[name],
+                                       inhibitory_weight[name]/10,
+                                       len(sources_i)),
+                            0, 127)),
+                key='weight')
 
-        intra_inh.append(create_synapses(i_neu, neu, aux_model, name=name+'_i'))
+        intra_inh.append(create_synapses(i_neu,
+                                         neu,
+                                         aux_model,
+                                         name=name+'_i'))
 
     """ ==================== Monitors ==================== """
     selected_exc_cells = rng.choice(Ne, 4, replace=False)
@@ -226,11 +225,11 @@ def balanced_network(args):
     sttmon_e = [StateMonitor(x, variables='Vm',
                              record=selected_exc_cells,
                              name=x.name+'_e_sttmon')
-                    for x in exc_neurons]
+                for x in exc_neurons]
     sttmon_i = [StateMonitor(x, variables='Vm',
                              record=selected_inh_cells,
                              name=x.name+'_i_sttmon')
-                    for x in inh_neurons]
+                for x in inh_neurons]
 
     """ ==================== running/processing ==================== """
     duration = 1000
@@ -257,13 +256,13 @@ def balanced_network(args):
     # Prepares to save final mean inhibitory weight for each case
     resolution = ['fp64', 'int4', 'int8', 'fp8']
     for res in resolution:
-        if res=='fp8':
+        if res == 'fp8':
             inhibitory_weight[res+'_syn'] = minifloat2decimal(
                     decimal2minifloat(inhibitory_weight[res+'_syn']))[0]
-        elif res=='int8':
+        elif res == 'int8':
             inhibitory_weight[res+'_syn'] = np.rint(
                 inhibitory_weight[res+'_syn'])
-        elif res=='int4':
+        elif res == 'int4':
             inhibitory_weight[res+'_syn'] = np.rint(
                 inhibitory_weight[res+'_syn'])
 
