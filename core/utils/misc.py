@@ -398,13 +398,20 @@ def fp8_multiply(num1, num2, _vectorisation_idx):
         list or numpy.array: 8-bit floating point binary word in the same
         format as the input.
     """
+    unpack = False
     if isinstance(_vectorisation_idx, int):
         unpack = True
         num1 = np.array([num1])
         num2 = np.array([num2])
         _vectorisation_idx = np.array([_vectorisation_idx])
-    else:
-        unpack = False
+
+    # Handle cases where single parameter from single object in involved with
+    # arrays
+    if isinstance(num1, int):
+        num1 = np.array([num1 for _ in _vectorisation_idx])
+    if isinstance(num2, int):
+        num2 = np.array([num2 for _ in _vectorisation_idx])
+
     num1 = num1.astype(int)
     num2 = num2.astype(int)
     val1_sign, val1_exponent, val1_abs, val1_normal = extract_fields(num1)
@@ -596,13 +603,20 @@ def fp8_add(num1, num2, _vectorisation_idx):
         list or numpy.array: 8-bit floating point binary word in the same
         format as the input.
     """
+    unpack = False
     if isinstance(_vectorisation_idx, int):
         unpack = True
         num1 = np.array([num1])
         num2 = np.array([num2])
         _vectorisation_idx = np.array([_vectorisation_idx])
-    else:
-        unpack = False
+
+    # Handle cases where single parameter from single object in involved with
+    # arrays
+    if isinstance(num1, int):
+        num1 = np.array([num1 for _ in _vectorisation_idx])
+    if isinstance(num2, int):
+        num2 = np.array([num2 for _ in _vectorisation_idx])
+
     num1 = num1.astype(int)
     num2 = num2.astype(int)
     num1_sign, num1_exponent, num1_abs, num1_normal = extract_fields(num1)
