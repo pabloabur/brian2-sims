@@ -1,18 +1,18 @@
 [![Docker Image CI](https://github.com/pabloabur/brian2-sims/actions/workflows/docker-image.yml/badge.svg)](https://github.com/pabloabur/brian2-sims/actions/workflows/docker-image.yml)
 
 # brian2-sims
-First build container with 
+First, build a container with 
 
 ```
 docker build -t app .
 ```
 
-then run it with 
+then run it with the command below. Alternatively, add the desired command at the end, e.g. `python run_simulation -h`
 ```
 docker run -it --rm -v $(pwd)/simulations:/tmp/simulations:ro -v $(pwd)/sim_data:/tmp/sim_data app
 ```
 
-Type `python run_simulation -h` to see simulations available and their options.
+Type `python run_simulation -h` to see the simulations available and their options.
 
 We used conda-based environment because if you are working on a remote server, conda might be a better option when linking other libraries/resources (e.g. C++).
 
