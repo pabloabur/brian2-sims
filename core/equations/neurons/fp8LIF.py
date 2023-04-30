@@ -3,6 +3,7 @@
 from brian2.units import *
 from core.equations.base_equation import BaseNeuron, ParamDict
 
+
 class fp8LIF(BaseNeuron):
     def __init__(self):
         super().__init__()
@@ -27,22 +28,16 @@ class fp8LIF(BaseNeuron):
             alpha_syn : integer (constant)
             alpha_ca : integer (constant)
             '''
-            #dVm/dt = (int(refrac==0)*clip_normal_dec + int(refrac==1)*refractory_decay)/second : 1
-            #clip_normal_dec = int(clip_rule == 0) * normal_decay : integer
-            #clip_rule = fp8_smaller_than(normal_decay, Vrest) * int(refrac == 0) : integer
-            #normal_decay = fp8_add(dec_term1, I) : integer
-            #dec_term1 = fp8_multiply(Vm, decay) : integer
-            #refractory_decay = fp8_multiply(Vm, refrac_decay) : integer
-            #refrac = fp8_smaller_than(Vm, Vrest) : integer
         self.threshold = 'Vm == Vthr'
         self.refractory = 'fp8_smaller_than(Vm, Vrest)==1'
         self.reset = '''
             Vm=Vreset;
             Vm_noise = 0*mV
-            Ca = fp8_add(Ca, 56)
+            Ca = fp8_add(Ca, Ca_inc)
             '''
         self.namespace = ParamDict({
             'Vthr': 127,  # 480 in decimal
+            'Ca_inc': 127  # 1 in decimal
             })
         self.parameters = ParamDict({
             'Vreset':  '177',  # -0.5625 in decimal,
@@ -53,6 +48,7 @@ class fp8LIF(BaseNeuron):
             'alpha_syn': '53',  # 0.8125 in decimal,
             'alpha_ca': '55',  # 0.9375 in decimal,
             'Vm': '0',
+            'Ca': '0',
             'g': '0',
             'Vm_noise': '0*mV',
             })
