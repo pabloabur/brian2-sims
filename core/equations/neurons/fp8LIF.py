@@ -37,7 +37,7 @@ class fp8LIF(BaseNeuron):
             '''
         self.namespace = ParamDict({
             'Vthr': 127,  # 480 in decimal
-            'Ca_inc': 127  # 1 in decimal
+            'Ca_inc': 50  # 
             })
         self.parameters = ParamDict({
             'Vreset':  '177',  # -0.5625 in decimal,

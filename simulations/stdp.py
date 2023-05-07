@@ -94,9 +94,8 @@ def stdp(args):
     stdp_model = fp8STDP()
     stdp_model.modify_model('connection', "i==j", key='condition')
     stdp_model.modify_model('parameters',
-                            decimal2minifloat(0.001953125),
+                            decimal2minifloat(0.03125),
                             key='w_plast')
-    # TODO tau syn and stdp tau 3ms?
     stdp_synapse = create_synapses(pre_neurons, post_neurons, stdp_model)
 
     # Setting up monitors
@@ -123,8 +122,6 @@ def stdp(args):
         device.build(args.code_path)
 
     if not args.quiet:
-        # TODO why does w decays to zero after first update?
-        # TODO why is dec2mf returning ...5 at the end of conversion??
         brian_plot(spikemon_pre_neurons)
         plt.savefig(f'{args.save_path}/fig1')
 
