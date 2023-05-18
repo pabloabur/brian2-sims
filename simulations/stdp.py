@@ -74,12 +74,15 @@ def stimuli(isi=10):
 def stdp(args):
     defaultclock.dt = args.timestep * ms
 
-    pre_spikegenerator, post_spikegenerator = stimuli(isi=30)
+    if args.protocol == 1:
+        pre_spikegenerator, post_spikegenerator = stimuli(isi=30)
 
     neuron_model = fp8LIF()
     pre_neurons = create_neurons(2, neuron_model)
     post_neurons = create_neurons(2, neuron_model)
 
+    elif args.protocol == 2:
+        pass
     synapse_model = fp8CUBA()
     synapse_model.modify_model('parameters',
                                decimal2minifloat(192),

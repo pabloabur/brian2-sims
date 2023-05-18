@@ -13,6 +13,8 @@ import numpy as np
 import os, sys
 sys.path.append(os.getcwd())
 
+from core.utils.misc import minifloat2decimal, decimal2minifloat
+
 from core.equations.neurons.fp8LIF import fp8LIF
 from core.equations.synapses.fp8CUBA import fp8CUBA
 from core.equations.synapses.fp8STDP import fp8STDP
@@ -51,52 +53,46 @@ def stdp_kernel(args):
     average_counter = np.zeros((average_trials, trial_duration))
     for avg_trial in range(average_trials):
         neuron_model = fp8LIF()
-        # pre_neurons = Neurons(N, model='v = tapre(t, i) : 1',
-        # threshold='v == 1', refractory='1*ms')
-        import pdb;pdb.set_trace()
-        # model='v = tapre(t, i) : 1', threshold='v == 1'
-        # pre_neurons.namespace.update({'tmax': tmax})
-        # pre_neurons.namespace.update({'tapre': tapre})
+        neuron_model.modify_model(
+            'model',
+            'decay_term = tapre(t, i)',
+            old_expr='decay_term = fp8_multiply(Vm, alpha)')
+        neuron_model.modify_model('threshold', '1', old_expr='Vthr')
+        neuron_model.namespace = {**neuron_model.namespace,
+                                  'tmax': tmax,
+                                  'tapre': tapre}
         pre_neurons = create_neurons(N, neuron_model)
 
-        post_neurons = Neurons(N, model='''v = tapost(t, i) : 1
-                                           Iin0 : amp
-                                           I_syn : amp''',
-                               threshold='v == 1', refractory='1*ms')
-        post_neurons.namespace.update({'tmax': tmax})
-        post_neurons.namespace.update({'tapost': tapost})
+        neuron_model = fp8LIF()
+        neuron_model.modify_model(
+            'model',
+            'decay_term = tapost(t, i)',
+            old_expr='decay_term = fp8_multiply(Vm, alpha)')
+        neuron_model.modify_model('threshold', '1', old_expr='Vthr')
+        neuron_model.namespace = {**neuron_model.namespace,
+                                  'tmax': tmax,
+                                  'tapost': tapost}
+        post_neurons = create_neurons(N, neuron_model)
 
-        stochastic_decay = ExplicitStateUpdater('''x_new = f(x,t)''')
-        stdp_synapse = Connections(pre_neurons, post_neurons,
-                                   method=stochastic_decay,
-                                   equation_builder=plastic_synapse_model(),
-                                   name='stdp_synapse')
-        stdp_synapse.connect('i==j')
-
-        # Setting parameters
-        init_wplast = 7
-        stdp_synapse.w_plast = init_wplast
-        stdp_synapse.taupre = 20*ms
-        stdp_synapse.taupost = 20*ms
-        stdp_synapse.stdp_thres = 1
-        stdp_synapse.rand_num_bits_Apre = 5
-        stdp_synapse.rand_num_bits_Apost = 5
-
-        # Parameters for LFSR
-        if 'lfsr' in plastic_synapse_model().keywords['model']:
-            num_bits = 5
-            stdp_synapse.lfsr_num_bits_syn = num_bits
-            stdp_synapse.lfsr_num_bits_Apre = 5
-            stdp_synapse.lfsr_num_bits_Apost = 5
-            ta = create_lfsr([], [stdp_synapse], defaultclock.dt)
+        stdp_model = fp8STDP()
+        stdp_model.modify_model('connection', "i==j", key='condition')
+        stdp_model.modify_model('parameters',
+                                decimal2minifloat(0.03125),
+                                key='w_plast')
+        stdp_synapse = create_synapses(pre_neurons,
+                                       post_neurons,
+                                       stdp_model)
 
         spikemon_pre_neurons = SpikeMonitor(pre_neurons, record=True)
         spikemon_post_neurons = SpikeMonitor(post_neurons, record=True)
+        statemon_pre_neurons = StateMonitor(pre_neurons,
+                                            variables=['Ca'],
+                                            record=True)
+        statemon_post_neurons = StateMonitor(post_neurons,
+                                             variables=['Ca'],
+                                             record=True)
         statemon_synapse = StateMonitor(stdp_synapse,
-                                        variables=['Apre', 'Apost', 'w_plast',
-                                                   'decay_probability_Apre',
-                                                   'decay_probability_Apost',
-                                                   're_init_counter'],
+                                        variables=['w_plast'],
                                         record=True,
                                         name='statemon_synapse')
 

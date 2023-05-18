@@ -122,6 +122,11 @@ subparser_balance.set_defaults(func=balanced_network)
 subparser_stdp = subparsers.add_parser(
     'STDP',
     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+subparser_stdp.add_argument('--protocol',
+                            type=int,
+                            help=f'Type of simulation. 1 is for '
+                                 f'general weight changes over time '
+                                 f'and 2 is for kernel.')
 subparser_stdp.set_defaults(func=stdp)
 
 args = parser.parse_args()
