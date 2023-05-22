@@ -124,6 +124,7 @@ subparser_stdp = subparsers.add_parser(
     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 subparser_stdp.add_argument('--protocol',
                             type=int,
+                            default=1,
                             help=f'Type of simulation. 1 is for '
                                  f'general weight changes over time '
                                  f'and 2 is for kernel.')
