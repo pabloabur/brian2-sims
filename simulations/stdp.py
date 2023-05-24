@@ -106,6 +106,7 @@ def stdp(args):
     defaultclock.dt = args.timestep * ms
 
     if args.protocol == 1:
+        N_pre, N_post = 2, 2
         pre_spikegenerator, post_spikegenerator = stimuli(isi=30)
         neuron_model = fp8LIF()
         pre_neurons = create_neurons(2, neuron_model)
@@ -126,6 +127,7 @@ def stdp(args):
 
     elif args.protocol == 2:
         tapre, tapost, tmax, N, trial_duration = stimuli2()
+        N_pre, N_post = N, N
         neuron_model = fp8LIF()
         neuron_model.modify_model(
             'model',
@@ -155,11 +157,47 @@ def stdp(args):
 
         tmax = tmax * ms
 
+    elif args.protocol == 3:
+        from brian2 import Hz, PoissonGroup
+        N_pre = 1000
+        N_post = 1
+        tmax = 1000 * ms # TODO was 150s??
+        # TODO below instead? does not work...
+        # neuron_model = fp8LIF()
+        # neuron_model.model += '\nrates : Hz'
+        # neuron_model.modify_model('threshold',
+                                  # 'rand()<rates*dt',
+                                  # old_expr='Vm == Vthr')
+        # pre_neurons = create_neurons(N_pre, neuron_model)
+        # stim = TimedArray(np.reshape([15 for _ in range(int(N_pre*(tmax/ms)))], (int(tmax/ms), N_pre))*Hz, dt=defaultclock.dt)
+        # pre_neurons.rates = 'stim(t, i)' #15*Hz
+        pre_neurons = PoissonGroup(N_pre, 15*Hz)
+
+        # TODO random init weight
+
+        neuron_model = fp8LIF()
+        post_neurons = create_neurons(N_post, neuron_model)
+
+    if args.protocol == 1 or args.protocol == 2:
+        conn_condition = 'i==j'
+    if args.protocol == 3:
+        # None makes it all to all
+        conn_condition = None
+
     stdp_model = fp8STDP()
-    stdp_model.modify_model('connection', "i==j", key='condition')
+    stdp_model.modify_model('connection',
+                            conn_condition,
+                            key='condition')
     stdp_model.modify_model('parameters',
                             decimal2minifloat(0.001953125),
                             key='w_plast')
+    if args.protocol == 3:
+        import pdb;pdb.set_trace()
+        stdp_model.model += ('dCa_syn/dt = fp8_multiply(Ca_syn, 55)/second : 1\n'
+                             + 'spiked : second\n')
+        stdp_model.on_pre += ('Ca_syn = fp8_add(Ca_syn, 50)\n'
+                              + 'spiked = t\n')
+        stdp_model.modify_model('on_post', 'Ca_syn', old_expr='Ca_pre')
     stdp_synapse = create_synapses(pre_neurons, post_neurons, stdp_model)
 
     # Setting up monitors
@@ -167,17 +205,17 @@ def stdp(args):
                                         name='spikemon_pre_neurons')
     spikemon_post_neurons = SpikeMonitor(post_neurons,
                                          name='spikemon_post_neurons')
-    statemon_pre_neurons = StateMonitor(pre_neurons,
-                                        variables=['Vm', 'g', 'Ca'],
-                                        record=range(N),
-                                        name='statemon_pre_neurons')
+    # statemon_pre_neurons = StateMonitor(pre_neurons,
+    #                                     variables=['Vm', 'g', 'Ca'],
+    #                                     record=range(N_pre),
+    #                                     name='statemon_pre_neurons')
     statemon_post_neurons = StateMonitor(post_neurons,
                                          variables=['Vm', 'g', 'Ca'],
-                                         record=range(N),
+                                         record=range(N_post),
                                          name='statemon_post_neurons')
     statemon_post_synapse = StateMonitor(stdp_synapse,
                                          variables=['w_plast'],
-                                         record=range(N),
+                                         record=range(N_post),
                                          name='statemon_post_synapse')
 
     run(tmax)
@@ -248,3 +286,17 @@ def stdp(args):
             # TODO average_wplast[avg_trial-1, :]-init_wplast #  one sample (in case of average)
             # np.mean(average_wplast, axis=0)-init_wplast #  average (in case of average)
             # TODO Apre's and Apost's, weak and strong. Maybe not necessary
+        elif args.protocol == 3:
+            # TODO adapt below
+            pdb.set_trace()
+            plt.subplot(311)
+            plt.hist(S.w_plast / S.w_max, 20)
+            plt.xlabel('Weight / w_max')
+            plt.subplot(312)
+            plt.plot(mon.t/second, mon.w_plast.T/S.w_max[0])
+            plt.xlabel('Time (s)')
+            plt.ylabel('Weight / w_max')
+            plt.subplot(313)
+            plt.plot(neu_mon.t/ms/1000, neu_mon.i, '.k')
+            plt.xlabel('Time (s)')
+            plt.ylabel('spikes')
