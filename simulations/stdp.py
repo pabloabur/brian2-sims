@@ -21,6 +21,7 @@ from core.utils.misc import minifloat2decimal, decimal2minifloat
 from core.equations.neurons.fp8LIF import fp8LIF
 from core.equations.synapses.fp8CUBA import fp8CUBA
 from core.equations.synapses.fp8STDP import fp8STDP
+from core.equations.synapses.STDP import STDP
 from core.builder.groups_builder import create_synapses, create_neurons
 
 
@@ -134,9 +135,6 @@ def stdp(args):
             'summed_decay = tapre(t, i)',
             old_expr='summed_decay = fp8_add(decay_term, gtot*int(not_refractory))')
         neuron_model.modify_model('threshold', '1', old_expr='Vthr')
-        # TODO why is it not working with Ca_inc=50 (i.e. 0.625_10)??
-        # It decays so becomes too small. Find one a bit bigger
-        neuron_model.modify_model('namespace', 127, key='Ca_inc')
         # TODO do I need tmax? and why not on run?
         neuron_model.namespace = {**neuron_model.namespace,
                                   'tmax': tmax,
@@ -149,7 +147,6 @@ def stdp(args):
             'summed_decay = tapost(t, i)',
             old_expr='summed_decay = fp8_add(decay_term, gtot*int(not_refractory))')
         neuron_model.modify_model('threshold', '1', old_expr='Vthr')
-        neuron_model.modify_model('namespace', 127, key='Ca_inc')
         neuron_model.namespace = {**neuron_model.namespace,
                                   'tmax': tmax,
                                   'tapost': tapost}
@@ -162,7 +159,7 @@ def stdp(args):
         N_pre = 1000
         N_post = 1
         tmax = 1000 * ms # TODO was 150s??
-        # TODO below instead? does not work...
+        # TODO below instead? does not work if rates varies
         # neuron_model = fp8LIF()
         # neuron_model.model += '\nrates : Hz'
         # neuron_model.modify_model('threshold',
@@ -171,10 +168,8 @@ def stdp(args):
         # pre_neurons = create_neurons(N_pre, neuron_model)
         # stim = TimedArray(np.reshape([15 for _ in range(int(N_pre*(tmax/ms)))], (int(tmax/ms), N_pre))*Hz, dt=defaultclock.dt)
         # pre_neurons.rates = 'stim(t, i)' #15*Hz
+        # TODO stragegy as before of converting poisson
         pre_neurons = PoissonGroup(N_pre, 15*Hz)
-
-        # TODO random init weight
-
         neuron_model = fp8LIF()
         post_neurons = create_neurons(N_post, neuron_model)
 
@@ -184,20 +179,32 @@ def stdp(args):
         # None makes it all to all
         conn_condition = None
 
-    stdp_model = fp8STDP()
+    # TODO plug full precision stdp here?
+    # stdp_model = fp8STDP()
+    stdp_model = STDP()
+    stdp_model.modify_model(
+        'model',
+        '',
+        old_expr='gtot0_post = g*w_factor : volt (summed)')
     stdp_model.modify_model('connection',
                             conn_condition,
                             key='condition')
-    stdp_model.modify_model('parameters',
-                            decimal2minifloat(0.001953125),
-                            key='w_plast')
-    if args.protocol == 3:
-        import pdb;pdb.set_trace()
-        stdp_model.model += ('dCa_syn/dt = fp8_multiply(Ca_syn, 55)/second : 1\n'
-                             + 'spiked : second\n')
-        stdp_model.on_pre += ('Ca_syn = fp8_add(Ca_syn, 50)\n'
-                              + 'spiked = t\n')
-        stdp_model.modify_model('on_post', 'Ca_syn', old_expr='Ca_pre')
+    # TODO random init weight
+    # stdp_model.modify_model('parameters',
+    #                         # TODO small values here get Vm stuck
+    #                         decimal2minifloat(8),#0.001953125),
+    #                         key='w_plast')
+    # if args.protocol == 3:
+        # stdp_model.model += ('dCa_syn/dt = fp8_multiply(Ca_syn, 55)/second : 1\n'
+                             # + 'spiked : second\n')
+        # stdp_model.on_pre += ('Ca_syn = fp8_add(Ca_syn, 127)\n'
+                              # + 'spiked = t\n')
+        # stdp_model.modify_model('on_post', 'Ca_syn', old_expr='Ca_pre')
+    import pdb;pdb.set_trace()
+    stdp_model.modify_model(
+        'on_pre',
+        'g_post = fp8_add(g_post, fp8_multiply(weight, w_factor)',
+        old_expr='g += w_plast')
     stdp_synapse = create_synapses(pre_neurons, post_neurons, stdp_model)
 
     # Setting up monitors
@@ -215,7 +222,7 @@ def stdp(args):
                                          name='statemon_post_neurons')
     statemon_post_synapse = StateMonitor(stdp_synapse,
                                          variables=['w_plast'],
-                                         record=range(N_post),
+                                         record=range(N_pre),
                                          name='statemon_post_synapse')
 
     run(tmax)
@@ -224,6 +231,7 @@ def stdp(args):
     if args.backend == 'cpp_standalone':
         device.build(args.code_path)
 
+    import pdb;pdb.set_trace()
     if not args.quiet:
         if args.protocol == 1:
             brian_plot(spikemon_pre_neurons)
@@ -267,7 +275,6 @@ def stdp(args):
                     temp_data[labels[idx]].extend(dat[idx])
             spikes = pd.DataFrame(temp_data)
             feather.write_dataframe(spikes, args.save_path + 'spikes.feather')
-            import pdb;pdb.set_trace()
 
             # TODO each timing is associate with one synase? In that case I just
             # redefine init_wplast to subtract it and plot over pairs_timing
@@ -288,15 +295,8 @@ def stdp(args):
             # TODO Apre's and Apost's, weak and strong. Maybe not necessary
         elif args.protocol == 3:
             # TODO adapt below
-            pdb.set_trace()
-            plt.subplot(311)
-            plt.hist(S.w_plast / S.w_max, 20)
-            plt.xlabel('Weight / w_max')
-            plt.subplot(312)
-            plt.plot(mon.t/second, mon.w_plast.T/S.w_max[0])
-            plt.xlabel('Time (s)')
-            plt.ylabel('Weight / w_max')
-            plt.subplot(313)
-            plt.plot(neu_mon.t/ms/1000, neu_mon.i, '.k')
-            plt.xlabel('Time (s)')
-            plt.ylabel('spikes')
+            import plotext as p
+            p.hist(statemon_post_synapse.w_plast)
+            p.show()
+            p.clear_figure()
+            p.plot(minifloat2decimal(statemon_post_synapse.w_plast[0, :]))
