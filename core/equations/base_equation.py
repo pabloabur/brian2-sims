@@ -57,6 +57,12 @@ class BaseEquation:
         """
         desc = getattr(self, attr)
         if isinstance(desc, str):
+            if key:
+                raise ValueError(f'Argument key={key}, but it should be '
+                                 f'different from None only when object '
+                                 f'to be changed is a dictionary. Did you '
+                                 f'mean old_expr?')
+
             if old_expr:
                 if old_expr not in desc:
                     raise ValueError(f'{old_expr} is not present on '
