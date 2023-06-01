@@ -128,6 +128,11 @@ subparser_stdp.add_argument('--protocol',
                             help=f'Type of simulation. 1 is for '
                                  f'general weight changes over time '
                                  f'and 2 is for kernel.')
+subparser_stdp.add_argument('--precision',
+                            type=str,
+                            default='fp64',
+                            help=f'Bit precision used. Currently only supports '
+                                 f'8 and 64')
 subparser_stdp.set_defaults(func=stdp)
 
 args = parser.parse_args()
