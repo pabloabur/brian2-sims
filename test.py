@@ -8,6 +8,7 @@ N = 3
 T = 24
 eta = 50
 
+
 class neuron:
     def __init__(self):
         self.vm = 0
@@ -39,7 +40,9 @@ class neuron:
             self.tw = 127
             self.active_spike = 1
 
+
 def time_driven_module(neurons):
+    # TODO for active
     for n in neurons:
         n.leak_vm()
         n.leak_psc()
@@ -47,23 +50,35 @@ def time_driven_module(neurons):
         n.integrate_current()
         n.threshold()
 
+
 def event_driven_module(neurons):
     for pre_id, n in enumerate(neurons):
-        fan_out_idx = [i for i, x in enumerate(fan_out[pre_id]) if x==1]
+        # TODO crossbar-like memory access, i.e. M*N or rho*M*N
+        fan_out_idx = [i for i, x in enumerate(fan_out[pre_id]) if x == 1]
 
+        # TODO relates to sparsity of the network, i.e. propagates
+        # TODO for active TW
         if n.active_spike == 1:
             for post_id in fan_out_idx:
                 neurons[post_id].psc = weights[pre_id][post_id]
 
-                if neurons[post_id].active_spike == 0 and neurons[post_id].tw > 0:
+                if (neurons[post_id].active_spike == 0
+                        and neurons[post_id].tw > 0):
                     delta_w = fp8_multiply(neurons[post_id].tw, eta, 0)
                     delta_w = fp8_multiply(delta_w, 184, 0)  # multiply by -1
-                    weights[pre_id][post_id] = fp8_add(weights[pre_id][post_id], delta_w, 0)
+                    weights[pre_id][post_id] = fp8_add(weights[pre_id][post_id],
+                                                       delta_w,
+                                                       0)
+
+        # TODO Strategy to make updates on post-event only
         elif n.tw > 0:
             for post_id in fan_out_idx:
                 if neurons[post_id].active_spike == 1:
                     delta_w = fp8_multiply(neurons[pre_id].tw, eta, 0)
-                    weights[pre_id][post_id] = fp8_add(weights[pre_id][post_id], delta_w, 0)
+                    weights[pre_id][post_id] = fp8_add(weights[pre_id][post_id],
+                                                       delta_w,
+                                                       0)
+
 
 neurons = [neuron() for _ in range(N)]
 # post:     A  B  C     /pre:
@@ -86,6 +101,8 @@ tw_monitor = np.zeros((N, 1))
 neurons[0].psc = 120
 neurons[1].psc = 180
 neurons[2].psc = 130
+
+# TODO active matrix: 1 if any "compartments" is non-zero
 
 for t in range(T):
     if t == 20:
