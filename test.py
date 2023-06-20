@@ -43,6 +43,7 @@ class neuron:
 
 def time_driven_module(neurons):
     # TODO for active
+    # TODO in brian, this is the 'model', 'threshold', and 'reset'
     for n in neurons:
         n.leak_vm()
         n.leak_psc()
@@ -52,6 +53,11 @@ def time_driven_module(neurons):
 
 
 def event_driven_module(neurons):
+    # TODO in brian triggered for each neuron if 'threshold' found spike. We
+    # do it for all active (set in memory somewhere), also checking state
+    # variables. We could do nothing in 'on_post' and 'on_pre' and do our loop
+    # with a run_reg on syapses that have access to proper namespace and
+    # when='after_resets'
     for pre_id, n in enumerate(neurons):
         # TODO crossbar-like memory access, i.e. M*N or rho*M*N
         fan_out_idx = [i for i, x in enumerate(fan_out[pre_id]) if x == 1]
