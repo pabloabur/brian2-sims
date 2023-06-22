@@ -28,13 +28,14 @@ class tsvLIF(BaseNeuron):
         self.reset = '''
             Vm = Vreset
             Ca += Ca_inc
+            Ca *= -1
             '''
         self.namespace = ParamDict({
             'Cm': 200*pF,
             'gl': 10*nS,
             'Vreset': 0*mV,
             'Vthr': 20*mV,
-            'Ca_inc': 480
+            'Ca_inc': 2
             })
         self.parameters = ParamDict({
             'Vm': 'Vreset',

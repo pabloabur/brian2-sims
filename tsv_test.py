@@ -1,6 +1,6 @@
 from core.utils.misc import fp8_add, fp8_multiply, minifloat2decimal, decimal2minifloat
 
-import matplotlib.pyplot as plt
+import plotext as plt
 import numpy as np
 from copy import deepcopy
 
@@ -27,8 +27,6 @@ class neuron:
 
     def leak_tw(self):
         self.tw = fp8_multiply(self.tw, 55, 0)
-        if self.active_spike:
-            self.active_spike = 0
 
     def integrate_current(self):
         if self.vm <= 127:
@@ -38,6 +36,7 @@ class neuron:
         if self.vm == 127:
             self.vm = 177
             self.tw = 127
+            self.tw *= -1
             self.active_spike = 1
 
 
@@ -85,6 +84,9 @@ def event_driven_module(neurons):
                                                        delta_w,
                                                        0)
 
+    for pre_id, n in enumerate(neurons):
+        if n.active_spike:
+            n.active_spike = 0
 
 neurons = [neuron() for _ in range(N)]
 # post:     A  B  C     /pre:
@@ -125,15 +127,18 @@ for t in range(T):
     record_tw = np.array([[neurons[i].tw for i in range(N)]])
     tw_monitor = np.concatenate((tw_monitor, record_tw.T), axis=1)
 
-f, (ax1, ax2, ax3) = plt.subplots(3, 1, sharex=True)
-ax1.plot(minifloat2decimal(tw_monitor[0]))
-ax1.set_title('Neuron A')
+import pdb;pdb.set_trace()
+plt.subplots(3, 1)
+plt.subplot(1, 1)
+plt.plot(minifloat2decimal(tw_monitor[0]))
+plt.title('Neuron A')
 
-ax2.plot(minifloat2decimal(tw_monitor[1]))
-ax2.set_title('Neuron B')
+plt.subplot(2, 1)
+plt.plot(minifloat2decimal(tw_monitor[1]))
+plt.title('Neuron B')
 
-ax3.plot(minifloat2decimal(tw_monitor[2]))
-ax3.set_title('Neuron C')
+plt.subplot(2, 1)
+plt.plot(minifloat2decimal(tw_monitor[2]))
+plt.title('Neuron C')
 
-plt.tight_layout()
 plt.show()

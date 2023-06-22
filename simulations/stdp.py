@@ -10,7 +10,7 @@ import numpy as np
 import feather
 import pandas as pd
 
-from brian2 import run, device, defaultclock,\
+from brian2 import run, device, defaultclock, scheduling_summary,\
     SpikeGeneratorGroup, StateMonitor, SpikeMonitor, TimedArray, PoissonGroup
 from brian2 import mV, second, Hz, ms
 
@@ -26,7 +26,7 @@ from core.equations.synapses.CUBA import CUBA
 from core.equations.synapses.STDP import STDP
 from core.equations.neurons.tsvLIF import tsvLIF
 from core.equations.synapses.tsvCUBA import tsvCUBA
-from core.builder.groups_builder import create_synapses, create_neurons
+from core.equations.synapses.tsvSTDP import tsvSTDP
 from core.builder.groups_builder import create_synapses, create_neurons
 
 from brian2 import Function, DEFAULT_FUNCTIONS
@@ -117,21 +117,28 @@ def stdp(args):
     defaultclock.dt = args.timestep * ms
     run_namespace = {}
 
+    # TODO not sure about this either
+    static_weight = 80
+
+    if args.precision == 'fp8':
+        neuron_model = fp8LIF()
+        aux_weight_sample = lambda x: decimal2minifloat(x, raise_warning=False)
+        aux_plot = lambda x: minifloat2decimal(x)
+        aux_plot_Ca = lambda x: minifloat2decimal(x)
+        synapse_model = fp8CUBA()
+        stdp_model = fp8STDP()
+    if args.precision == 'fp64':
+        neuron_model = tsvLIF()
+        aux_weight_sample = lambda x: x * mV
+        aux_plot = lambda x: x/mV
+        aux_plot_Ca = lambda x: x
+        synapse_model = tsvCUBA()
+        stdp_model = tsvSTDP()
+
     if args.protocol == 1:
         N_pre, N_post = 2, 2
         n_conns = N_pre
         pre_spikegenerator, post_spikegenerator = stimuli_protocol1(isi=30)
-        static_weight = 192
-        if args.precision == 'fp8':
-            neuron_model = fp8LIF()
-            static_weight = decimal2minifloat(static_weight)
-            synapse_model = fp8CUBA()
-            stdp_model = fp8STDP()
-        if args.precision == 'fp64':
-            neuron_model = tsvLIF()
-            static_weight *= mV
-            synapse_model = tsvCUBA()
-            # TODO stdp_model = tsvSTDP()
         pre_neurons = create_neurons(2, neuron_model)
         post_neurons = create_neurons(2, neuron_model)
 
@@ -140,7 +147,7 @@ def stdp(args):
         ref_post_neurons = create_neurons(2, neuron_model)
 
         synapse_model.modify_model('parameters',
-                                   static_weight,
+                                   aux_weight_sample(static_weight),
                                    key='weight')
         pre_synapse = create_synapses(pre_spikegenerator,
                                       pre_neurons,
@@ -153,7 +160,7 @@ def stdp(args):
 
         synapse_model = CUBA()
         synapse_model.modify_model('parameters',
-                                   192*mV,
+                                   static_weight*mV,
                                    key='weight')
         ref_pre_synapse = create_synapses(pre_spikegenerator,
                                           ref_pre_neurons,
@@ -208,36 +215,13 @@ def stdp(args):
     stdp_model.modify_model('connection',
                             conn_condition,
                             key='condition')
+
     rng = np.random.default_rng()
-    # TODO should sample also for fp64
     sampled_weights = rng.uniform(0, 16, n_conns)
-
-    # TODO this whole adaptation might not be needed anymore
-    if args.precision == 'fp64':
-        import pdb;pdb.set_trace()
-        stdp_model.modify_model('model', 'w_plast : 1', old_expr='w_plast : integer')
-        stdp_model.modify_model('namespace', 0.001953125, key='eta')
-
-        eq_delete = ['w_change = fp8_multiply(eta, Ca_post)',
-                     'w_change = fp8_multiply(184, w_change)',
-                     'w_change = fp8_add(w_plast, w_change)']
-        for eq in eq_delete:
-            stdp_model.modify_model('on_pre', '', old_expr=eq)
-        stdp_model.modify_model(
-            'on_pre',
-            'w_plast = clip(w_plast - eta*minifloat2decimal(Ca_post), 0, inf)\n',
-            old_expr='w_plast = int(w_change<=127)*w_change')
-
-        stdp_model.modify_model('on_post',
-                                '',
-                                old_expr='w_change = fp8_multiply(eta, Ca_pre)')
-        stdp_model.modify_model(
-            'on_post',
-            'w_plast = clip(w_plast + eta*minifloat2decimal(Ca_pre), 0, inf)\n',
-            old_expr='w_plast = fp8_add(w_plast, w_change)')
     if args.precision == 'fp8':
-        sampled_weights = decimal2minifloat(sampled_weights, raise_warning=False)
-
+        sampled_weights = aux_weight_sample(sampled_weights)
+    if args.precision == 'fp64':
+        sampled_weights = aux_weight_sample(sampled_weights)
     stdp_model.modify_model('parameters',
                             sampled_weights,
                             key='w_plast')
@@ -249,27 +233,39 @@ def stdp(args):
                               + 'spiked = t\n')
         stdp_model.modify_model('on_post', 'Ca_syn', old_expr='Ca_pre')
 
-    # TODO keep on_pre, remove on_post. run_reg should (is it?)
-    #     - depotentiate if TW_pre is negative and TW_post is positive
-    #     - potentiate if TW_pre is positive and TW_post is negative
-    #     - reset TW sign, i.e. to positive
-    # Setting to negative is done in neuron 'model' part upon spike
-    # TODO but then I need to change schedile, check in
-    # TODO seems like brian cannot do g_post = f(g_post, ...)
-    # stdp_model.modify_model('on_pre', ' ')
+    # TODO should also find right ca_inc
+    pre_neurons.namespace['Ca_inc'] = 1
+    post_neurons.namespace['Ca_inc'] = 1
     stdp_synapse = create_synapses(pre_neurons,
                                    post_neurons,
                                    stdp_model,
                                    name='stdp_synapse')
-    # stdp_synapse.run_regularly(
-    #     '''sign_weight = fp8_multiply(w_plast, w_factor)
-    #        g_post = fp8_add(g_post, sign_weight)
-    #        ''',
-    #     # '''g_post = fp8_add(g_post, fp8_multiply(w_plast, w_factor))
-    #     #    w_plast = clip(w_plast - eta*minifloat2decimal(Ca_post), 0, inf)
-    #     #    ''',
-    #     dt=defaultclock.dt,
-    #     when='after_resets')
+
+    # TODO organize fp8 as well
+    # TODO this should be a module/function,  e.g. add_tsv_scheme()
+    # TODO not sure this is the eta we want
+    stdp_synapse.namespace['eta'] = 0.01*mV
+    if args.precision == 'fp64':
+        stdp_synapse.run_regularly(
+            '''delta_w = int(Ca_pre<0 and Ca_post>0)*(w_plast - eta*Ca_post) + int(Ca_pre>0 and Ca_post<0)*(w_plast + eta*Ca_post)
+               w_plast += delta_w
+               ''',
+            name='weight_update',
+            dt=defaultclock.dt,
+            when='after_resets',
+            order=0)
+        #pre_neurons.run_regularly(
+        #    'Ca = Ca*int(Ca>0) - Ca*int(Ca<0)',
+        #    name='clear_spike_flag_pre',
+        #    dt=defaultclock.dt,
+        #    when='after_resets',
+        #    order=1)
+        #post_neurons.run_regularly(
+        #    'Ca = Ca*int(Ca>0) - Ca*int(Ca<0)',
+        #    name='clear_spike_flag_post',
+        #    dt=defaultclock.dt,
+        #    when='after_resets',
+        #    order=1)
 
     # Setting up monitors
     spikemon_pre_neurons = SpikeMonitor(pre_neurons,
@@ -301,28 +297,34 @@ def stdp(args):
 
     if not args.quiet:
         if args.protocol == 1:
+            import pdb;pdb.set_trace()
+            print(statemon_post_synapse.w_plast[0][:100])
+            plot_delta_ti = 0
+            plot_delta_tf = 400
             plt.scatter(spikemon_pre_neurons.t/ms, spikemon_pre_neurons.i)
             plt.scatter(spikemon_post_neurons.t/ms, spikemon_post_neurons.i)
             plt.show()
 
             plt.clear_figure()
             plt.plot(statemon_post_synapse.t/ms,
-                     minifloat2decimal(statemon_post_synapse.w_plast[0]))
+                     aux_plot(statemon_post_synapse.w_plast[0]))
             plt.show()
 
             plt.clear_figure()
             plt.plot(statemon_post_neurons.t/ms,
-                     minifloat2decimal(statemon_post_neurons.Ca[0]))
+                     aux_plot_Ca(statemon_post_neurons.Ca[0][plot_delta_ti:plot_delta_tf]))
+            plt.plot(statemon_pre_neurons.t/ms,
+                     aux_plot_Ca(statemon_pre_neurons.Ca[0][plot_delta_ti:plot_delta_tf]))
             plt.show()
 
             plt.clear_figure()
-            max_val = max(minifloat2decimal(statemon_pre_neurons.Vm[0]))
-            norm_fp8_vm = [x/max_val
-                           for x in minifloat2decimal(statemon_pre_neurons.Vm[0])]
-            plt.plot(statemon_pre_neurons.t[:500]/ms, norm_fp8_vm[:500])
+            max_val = max(aux_plot(statemon_pre_neurons.Vm[0]))
+            norm_vm = [x/max_val
+                           for x in aux_plot(statemon_pre_neurons.Vm[0])]
+            plt.plot(statemon_pre_neurons.t[plot_delta_ti:plot_delta_tf]/ms, norm_vm[plot_delta_ti:plot_delta_tf])
             max_val = max(ref_statemon_pre_neurons.Vm[0])
-            norm_fp64_vm = [x/max_val for x in ref_statemon_pre_neurons.Vm[0]]
-            plt.plot(ref_statemon_pre_neurons.t[:500]/ms, norm_fp64_vm[:500])
+            norm_ref_vm = [x/max_val for x in ref_statemon_pre_neurons.Vm[0]]
+            plt.plot(ref_statemon_pre_neurons.t[plot_delta_ti:plot_delta_tf]/ms, norm_ref_vm[plot_delta_ti:plot_delta_tf])
             plt.show()
 
         elif args.protocol == 2:
