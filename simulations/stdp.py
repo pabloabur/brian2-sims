@@ -34,7 +34,7 @@ minifloat2decimal = Function(minifloat2decimal, arg_units=[1], return_unit=1)
 DEFAULT_FUNCTIONS.update({'minifloat2decimal': minifloat2decimal})
 
 
-def stimuli_protocol1(isi=10):
+def stimuli_protocol1():
     """Stimulus gneration for STDP protocols.
 
     This function returns two brian2 objects.
@@ -43,36 +43,43 @@ def stimuli_protocol1(isi=10):
     The protocol follows homoeostasis, weak LTP, weak LTD, strong LTP,
     strong LTD, homoeostasis.
 
-    Args:
-        isi (int, optional): Interspike Interval. How many spikes per stimulus
-            phase.
-
     Returns:
         SpikeGeneratorGroup (brian2.obj: Brian2 objects which hold the
             spiketimes and the respective neuron indices.
     """
-    t_pre_homoeotasis_1 = np.arange(3, 304, isi)
-    t_pre_weakLTP = np.arange(403, 604, isi)
-    t_pre_weakLTD = np.arange(703, 904, isi)
-    t_pre_strongLTP = np.arange(1003, 1204, isi)
-    t_pre_strongLTD = np.arange(1303, 1504, isi)
-    t_pre_homoeotasis_2 = np.arange(1603, 1804, isi)
+    t_pre_homoeotasis_1 = np.linspace(0, 300, 5)
+    t_pre_weakLTP = np.linspace(t_pre_homoeotasis_1[-1] + 100,
+                                t_pre_homoeotasis_1[-1] + 400,
+                                5)
+    t_pre_weakLTD = np.linspace(t_pre_weakLTP[-1] + 100,
+                                t_pre_weakLTP[-1] + 400,
+                                5)
+    t_pre_strongLTP = np.linspace(t_pre_weakLTD[-1] + 100,
+                                  t_pre_weakLTD[-1] + 400,
+                                  5)
+    t_pre_strongLTD = np.linspace(t_pre_strongLTP[-1] + 100,
+                                  t_pre_strongLTP[-1] + 400,
+                                  5)
+    t_pre_homoeotasis_2 = np.linspace(t_pre_strongLTD[-1] + 100,
+                                      t_pre_strongLTD[-1] + 400,
+                                      5)
     t_pre = np.hstack((t_pre_homoeotasis_1, t_pre_weakLTP, t_pre_weakLTD,
                        t_pre_strongLTP, t_pre_strongLTD, t_pre_homoeotasis_2))
 
     # Normal distributed shift of spike times to ensure homoeotasis
     t_post_homoeotasis_1 = t_pre_homoeotasis_1 + \
         np.random.randint(-3, 3, len(t_pre_homoeotasis_1))
-    t_post_weakLTP = t_pre_weakLTP + 5   # post neuron spikes 7 ms after pre
-    t_post_weakLTD = t_pre_weakLTD - 5   # post neuron spikes 7 ms before pre
-    t_post_strongLTP = t_pre_strongLTP + 1  # post neurons spike 1 ms after pre
-    t_post_strongLTD = t_pre_strongLTD - 1  # and 1 ms before pre
+    t_post_weakLTP = t_pre_weakLTP + 15   # post spikes some ms after pre
+    t_post_weakLTD = t_pre_weakLTD - 15   # post spikes some ms before pre
+    t_post_strongLTP = t_pre_strongLTP + 3  # post spike some ms after pre
+    t_post_strongLTD = t_pre_strongLTD - 3  # and some ms before pre
     t_post_homoeotasis_2 = t_pre_homoeotasis_2 + \
         np.random.randint(-3, 3, len(t_pre_homoeotasis_2))
 
     t_post = np.hstack((t_post_homoeotasis_1, t_post_weakLTP, t_post_weakLTD,
                         t_post_strongLTP, t_post_strongLTD,
                         t_post_homoeotasis_2))
+    t_post = np.clip(t_post, 0, np.inf)
     ind_pre = np.zeros(len(t_pre))
     ind_post = np.zeros(len(t_post))
 
@@ -81,7 +88,8 @@ def stimuli_protocol1(isi=10):
     post = SpikeGeneratorGroup(
         1, indices=ind_post, times=t_post * ms, name='gPost')
 
-    return pre, post
+    tmax = max(pre._spike_time[-1], post._spike_time[-1]) * second
+    return pre, post, tmax
 
 
 def stimuli_protocol2():
@@ -117,28 +125,31 @@ def stdp(args):
     defaultclock.dt = args.timestep * ms
     run_namespace = {}
 
-    # TODO not sure about this either
-    static_weight = 80
+    # TODO not sure about this either. Note Vm eq is more realistic i.e.
+    # attenuates g more
+    static_weight = 120
 
     if args.precision == 'fp8':
         neuron_model = fp8LIF()
-        aux_weight_sample = lambda x: decimal2minifloat(x, raise_warning=False)
-        aux_plot = lambda x: minifloat2decimal(x)
-        aux_plot_Ca = lambda x: minifloat2decimal(x)
+        def aux_w_sample(x): return decimal2minifloat(x, raise_warning=False)
+        def aux_plot(x): return minifloat2decimal(x)
+        def aux_plot_Ca(x): return minifloat2decimal(x)
         synapse_model = fp8CUBA()
         stdp_model = fp8STDP()
-    if args.precision == 'fp64':
+    elif args.precision == 'fp64':
         neuron_model = tsvLIF()
-        aux_weight_sample = lambda x: x * mV
-        aux_plot = lambda x: x/mV
-        aux_plot_Ca = lambda x: x
+        # TODO not sure about this either
+        #neuron_model.namespace['Vthr'] = 480*mV
+        def aux_w_sample(x): return x * mV
+        def aux_plot(x): return x/mV
+        def aux_plot_Ca(x): return x
         synapse_model = tsvCUBA()
         stdp_model = tsvSTDP()
 
     if args.protocol == 1:
         N_pre, N_post = 2, 2
         n_conns = N_pre
-        pre_spikegenerator, post_spikegenerator = stimuli_protocol1(isi=30)
+        pre_spikegenerator, post_spikegenerator, tmax = stimuli_protocol1()
         pre_neurons = create_neurons(2, neuron_model)
         post_neurons = create_neurons(2, neuron_model)
 
@@ -147,7 +158,7 @@ def stdp(args):
         ref_post_neurons = create_neurons(2, neuron_model)
 
         synapse_model.modify_model('parameters',
-                                   aux_weight_sample(static_weight),
+                                   aux_w_sample(static_weight),
                                    key='weight')
         pre_synapse = create_synapses(pre_spikegenerator,
                                       pre_neurons,
@@ -170,8 +181,6 @@ def stdp(args):
                                            ref_post_neurons,
                                            synapse_model,
                                            name='ref_static_post_synapse')
-
-        tmax = 2. * second
 
     elif args.protocol == 2:
         tapre, tapost, tmax, N, trial_duration = stimuli_protocol2()
@@ -219,9 +228,9 @@ def stdp(args):
     rng = np.random.default_rng()
     sampled_weights = rng.uniform(0, 16, n_conns)
     if args.precision == 'fp8':
-        sampled_weights = aux_weight_sample(sampled_weights)
+        sampled_weights = aux_w_sample(sampled_weights)
     if args.precision == 'fp64':
-        sampled_weights = aux_weight_sample(sampled_weights)
+        sampled_weights = aux_w_sample(sampled_weights)
     stdp_model.modify_model('parameters',
                             sampled_weights,
                             key='w_plast')
@@ -234,8 +243,8 @@ def stdp(args):
         stdp_model.modify_model('on_post', 'Ca_syn', old_expr='Ca_pre')
 
     # TODO should also find right ca_inc
-    pre_neurons.namespace['Ca_inc'] = 1
-    post_neurons.namespace['Ca_inc'] = 1
+    # pre_neurons.namespace['Ca_inc'] = 1
+    # post_neurons.namespace['Ca_inc'] = 1
     stdp_synapse = create_synapses(pre_neurons,
                                    post_neurons,
                                    stdp_model,
@@ -244,28 +253,29 @@ def stdp(args):
     # TODO organize fp8 as well
     # TODO this should be a module/function,  e.g. add_tsv_scheme()
     # TODO not sure this is the eta we want
-    stdp_synapse.namespace['eta'] = 0.01*mV
+    stdp_synapse.namespace['eta'] = 2**-9*mV#0.01*mV
     if args.precision == 'fp64':
+        # TODO am I unecessarily iterating over all connections?
         stdp_synapse.run_regularly(
-            '''delta_w = int(Ca_pre<0 and Ca_post>0)*(w_plast - eta*Ca_post) + int(Ca_pre>0 and Ca_post<0)*(w_plast + eta*Ca_post)
+            '''delta_w = int(Ca_pre>0 and Ca_post<0)*(eta*Ca_pre) - int(Ca_pre<0 and Ca_post>0)*(eta*Ca_post)
                w_plast += delta_w
                ''',
             name='weight_update',
             dt=defaultclock.dt,
             when='after_resets',
             order=0)
-        #pre_neurons.run_regularly(
-        #    'Ca = Ca*int(Ca>0) - Ca*int(Ca<0)',
-        #    name='clear_spike_flag_pre',
-        #    dt=defaultclock.dt,
-        #    when='after_resets',
-        #    order=1)
-        #post_neurons.run_regularly(
-        #    'Ca = Ca*int(Ca>0) - Ca*int(Ca<0)',
-        #    name='clear_spike_flag_post',
-        #    dt=defaultclock.dt,
-        #    when='after_resets',
-        #    order=1)
+        pre_neurons.run_regularly(
+            'Ca = Ca*int(Ca>0) - Ca*int(Ca<0)',
+            name='clear_spike_flag_pre',
+            dt=defaultclock.dt,
+            when='after_resets',
+            order=1)
+        post_neurons.run_regularly(
+            'Ca = Ca*int(Ca>0) - Ca*int(Ca<0)',
+            name='clear_spike_flag_post',
+            dt=defaultclock.dt,
+            when='after_resets',
+            order=1)
 
     # Setting up monitors
     spikemon_pre_neurons = SpikeMonitor(pre_neurons,
@@ -297,34 +307,40 @@ def stdp(args):
 
     if not args.quiet:
         if args.protocol == 1:
-            import pdb;pdb.set_trace()
-            print(statemon_post_synapse.w_plast[0][:100])
-            plot_delta_ti = 0
-            plot_delta_tf = 400
-            plt.scatter(spikemon_pre_neurons.t/ms, spikemon_pre_neurons.i)
-            plt.scatter(spikemon_post_neurons.t/ms, spikemon_post_neurons.i)
+            delta_ti = 0
+            delta_tf = -1
+            plt.scatter(spikemon_pre_neurons.t[delta_ti:delta_tf]/ms,
+                        spikemon_pre_neurons.i[delta_ti:delta_tf])
+            plt.scatter(spikemon_post_neurons.t[delta_ti:delta_tf]/ms,
+                        spikemon_post_neurons.i[delta_ti:delta_tf])
             plt.show()
 
             plt.clear_figure()
-            plt.plot(statemon_post_synapse.t/ms,
-                     aux_plot(statemon_post_synapse.w_plast[0]))
+            plt.plot(statemon_post_synapse.t[delta_ti:delta_tf]/ms,
+                     aux_plot(
+                         statemon_post_synapse.w_plast[0][delta_ti:delta_tf]))
             plt.show()
 
             plt.clear_figure()
-            plt.plot(statemon_post_neurons.t/ms,
-                     aux_plot_Ca(statemon_post_neurons.Ca[0][plot_delta_ti:plot_delta_tf]))
-            plt.plot(statemon_pre_neurons.t/ms,
-                     aux_plot_Ca(statemon_pre_neurons.Ca[0][plot_delta_ti:plot_delta_tf]))
+            plt.plot(statemon_post_neurons.t[delta_ti:delta_tf]/ms,
+                     aux_plot_Ca(
+                         statemon_post_neurons.Ca[0][delta_ti:delta_tf]))
+            plt.plot(statemon_pre_neurons.t[delta_ti:delta_tf]/ms,
+                     aux_plot_Ca(
+                         statemon_pre_neurons.Ca[0][delta_ti:delta_tf]))
             plt.show()
 
             plt.clear_figure()
             max_val = max(aux_plot(statemon_pre_neurons.Vm[0]))
             norm_vm = [x/max_val
-                           for x in aux_plot(statemon_pre_neurons.Vm[0])]
-            plt.plot(statemon_pre_neurons.t[plot_delta_ti:plot_delta_tf]/ms, norm_vm[plot_delta_ti:plot_delta_tf])
+                       for x in aux_plot(statemon_pre_neurons.Vm[0])]
+            plt.plot(statemon_pre_neurons.t[delta_ti:delta_tf]/ms,
+                     norm_vm[delta_ti:delta_tf])
             max_val = max(ref_statemon_pre_neurons.Vm[0])
             norm_ref_vm = [x/max_val for x in ref_statemon_pre_neurons.Vm[0]]
-            plt.plot(ref_statemon_pre_neurons.t[plot_delta_ti:plot_delta_tf]/ms, norm_ref_vm[plot_delta_ti:plot_delta_tf])
+            plt.plot(ref_statemon_pre_neurons.t[delta_ti:delta_tf]/ms,
+                     norm_ref_vm[delta_ti:delta_tf])
+            #import pdb;pdb.set_trace()
             plt.show()
 
         elif args.protocol == 2:

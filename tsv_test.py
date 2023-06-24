@@ -5,7 +5,7 @@ import numpy as np
 from copy import deepcopy
 
 N = 3
-T = 24
+T = 23
 eta = 50
 
 
@@ -36,7 +36,7 @@ class neuron:
         if self.vm == 127:
             self.vm = 177
             self.tw = 127
-            self.tw *= -1
+            self.tw += 128
             self.active_spike = 1
 
 
@@ -68,7 +68,7 @@ def event_driven_module(neurons):
                 neurons[post_id].psc = weights[pre_id][post_id]
 
                 if (neurons[post_id].active_spike == 0
-                        and neurons[post_id].tw > 0):
+                        and minifloat2decimal([neurons[post_id].tw])[0] > 0):
                     delta_w = fp8_multiply(neurons[post_id].tw, eta, 0)
                     delta_w = fp8_multiply(delta_w, 184, 0)  # multiply by -1
                     weights[pre_id][post_id] = fp8_add(weights[pre_id][post_id],
@@ -76,7 +76,8 @@ def event_driven_module(neurons):
                                                        0)
 
         # TODO Strategy to make updates on post-event only
-        elif n.tw > 0:
+        elif minifloat2decimal([n.tw])[0] > 0:
+            # TODO note it enters loop, but connection does not exist
             for post_id in fan_out_idx:
                 if neurons[post_id].active_spike == 1:
                     delta_w = fp8_multiply(neurons[pre_id].tw, eta, 0)
@@ -87,6 +88,7 @@ def event_driven_module(neurons):
     for pre_id, n in enumerate(neurons):
         if n.active_spike:
             n.active_spike = 0
+            n.tw -= 128
 
 neurons = [neuron() for _ in range(N)]
 # post:     A  B  C     /pre:
@@ -127,7 +129,6 @@ for t in range(T):
     record_tw = np.array([[neurons[i].tw for i in range(N)]])
     tw_monitor = np.concatenate((tw_monitor, record_tw.T), axis=1)
 
-import pdb;pdb.set_trace()
 plt.subplots(3, 1)
 plt.subplot(1, 1)
 plt.plot(minifloat2decimal(tw_monitor[0]))
@@ -137,7 +138,7 @@ plt.subplot(2, 1)
 plt.plot(minifloat2decimal(tw_monitor[1]))
 plt.title('Neuron B')
 
-plt.subplot(2, 1)
+plt.subplot(3, 1)
 plt.plot(minifloat2decimal(tw_monitor[2]))
 plt.title('Neuron C')
 

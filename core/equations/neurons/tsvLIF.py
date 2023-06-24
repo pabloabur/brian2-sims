@@ -35,11 +35,12 @@ class tsvLIF(BaseNeuron):
             'gl': 10*nS,
             'Vreset': 0*mV,
             'Vthr': 20*mV,
-            'Ca_inc': 2
+            'Ca_inc': 480
             })
         self.parameters = ParamDict({
             'Vm': 'Vreset',
             'Ca': '0',
+            'g': '0*mV',
             'Iconst': '0*pA',
             'tau_m': 'Cm/gl',
             'alpha': 'tau_m/(dt + tau_m)',
