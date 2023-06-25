@@ -9,6 +9,7 @@ Zurich and ETH Zurich, 2018.
 import numpy as np
 import feather
 import pandas as pd
+import quantities as q
 
 from brian2 import run, device, defaultclock, scheduling_summary,\
     SpikeGeneratorGroup, StateMonitor, SpikeMonitor, TimedArray, PoissonGroup
@@ -17,6 +18,7 @@ from brian2 import mV, second, Hz, ms
 import plotext as plt
 
 from core.utils.misc import minifloat2decimal, decimal2minifloat
+from core.utils.process_responses import neurons_rate
 
 from core.equations.neurons.fp8LIF import fp8LIF
 from core.equations.synapses.fp8CUBA import fp8CUBA
@@ -93,7 +95,7 @@ def stimuli_protocol1():
 
 
 def stimuli_protocol2():
-    trials = 105
+    trials = 20
     trial_duration = 60
     N = trial_duration
     wait_time = 2*trial_duration  # delay to avoid interferences
@@ -123,11 +125,8 @@ def stimuli_protocol2():
 
 def stdp(args):
     defaultclock.dt = args.timestep * ms
+    rng = np.random.default_rng()
     run_namespace = {}
-
-    # TODO not sure about this either. Note Vm eq is more realistic i.e.
-    # attenuates g more
-    static_weight = 120
 
     if args.precision == 'fp8':
         neuron_model = fp8LIF()
@@ -138,8 +137,6 @@ def stdp(args):
         stdp_model = fp8STDP()
     elif args.precision == 'fp64':
         neuron_model = tsvLIF()
-        # TODO not sure about this either
-        #neuron_model.namespace['Vthr'] = 480*mV
         def aux_w_sample(x): return x * mV
         def aux_plot(x): return x/mV
         def aux_plot_Ca(x): return x
@@ -149,13 +146,12 @@ def stdp(args):
     if args.protocol == 1:
         N_pre, N_post = 2, 2
         n_conns = N_pre
+        sampled_weights = [11 for _ in range(n_conns)]
+        static_weight = 120
+
         pre_spikegenerator, post_spikegenerator, tmax = stimuli_protocol1()
         pre_neurons = create_neurons(2, neuron_model)
         post_neurons = create_neurons(2, neuron_model)
-
-        neuron_model = LIF()
-        ref_pre_neurons = create_neurons(2, neuron_model)
-        ref_post_neurons = create_neurons(2, neuron_model)
 
         synapse_model.modify_model('parameters',
                                    aux_w_sample(static_weight),
@@ -169,37 +165,25 @@ def stdp(args):
                                        synapse_model,
                                        name='static_post_synapse')
 
-        synapse_model = CUBA()
-        synapse_model.modify_model('parameters',
-                                   static_weight*mV,
-                                   key='weight')
-        ref_pre_synapse = create_synapses(pre_spikegenerator,
-                                          ref_pre_neurons,
-                                          synapse_model,
-                                          name='ref_static_pre_synapse')
-        ref_post_synapse = create_synapses(post_spikegenerator,
-                                           ref_post_neurons,
-                                           synapse_model,
-                                           name='ref_static_post_synapse')
-
     elif args.protocol == 2:
         tapre, tapost, tmax, N, trial_duration = stimuli_protocol2()
         N_pre, N_post = N, N
         n_conns = N
-        neuron_model = fp8LIF()
-        neuron_model.modify_model(
-            'model',
-            'summed_decay = tapre(t, i)',
-            old_expr='summed_decay = fp8_add(decay_term, gtot*int(not_refractory))')
-        neuron_model.modify_model('threshold', '1', old_expr='Vthr')
+        sampled_weights = [50 for _ in range(n_conns)]
+        # TODO organize fp8 as well
+        # TODO for fp8? The idea is to inject current so neurons spikes, but maybe I dont have to
+        #neuron_model.modify_model(
+        #    'model',
+        #    'summed_decay = tapre(t, i)',
+        #    old_expr='summed_decay = fp8_add(decay_term, gtot*int(not_refractory))')
+        neuron_model.modify_model('threshold', 'tapre(t, i) == 1', old_expr='Vm > Vthr')
         pre_neurons = create_neurons(N, neuron_model)
 
-        neuron_model = fp8LIF()
-        neuron_model.modify_model(
-            'model',
-            'summed_decay = tapost(t, i)',
-            old_expr='summed_decay = fp8_add(decay_term, gtot*int(not_refractory))')
-        neuron_model.modify_model('threshold', '1', old_expr='Vthr')
+        #neuron_model.modify_model(
+        #    'model',
+        #    'summed_decay = tapost(t, i)',
+        #    old_expr='summed_decay = fp8_add(decay_term, gtot*int(not_refractory))')
+        neuron_model.modify_model('threshold', 'tapost', old_expr='tapre')
         post_neurons = create_neurons(N, neuron_model)
 
         tmax = tmax * ms
@@ -210,10 +194,15 @@ def stdp(args):
         N_pre = 1000
         N_post = 1
         n_conns = N_pre
+        sampled_weights = rng.gamma(.1, 1.75, n_conns)
         tmax = 10000 * ms
-        pre_neurons = PoissonGroup(N_pre, 15*Hz)
-        neuron_model = fp8LIF()
+
         post_neurons = create_neurons(N_post, neuron_model)
+        neuron_model.modify_model('threshold', 'rand()<rates*dt')
+        neuron_model.model += 'rates : Hz\n'
+        neuron_model.modify_model('parameters', rng.uniform(5, 15, N_pre)*ms, key='tau_ca')
+        pre_neurons = create_neurons(N_pre, neuron_model)
+        pre_neurons.rates = 15*Hz
 
     if args.protocol == 1 or args.protocol == 2:
         conn_condition = 'i==j'
@@ -225,8 +214,6 @@ def stdp(args):
                             conn_condition,
                             key='condition')
 
-    rng = np.random.default_rng()
-    sampled_weights = rng.uniform(0, 16, n_conns)
     if args.precision == 'fp8':
         sampled_weights = aux_w_sample(sampled_weights)
     if args.precision == 'fp64':
@@ -235,30 +222,18 @@ def stdp(args):
                             sampled_weights,
                             key='w_plast')
 
-    if args.protocol == 3:
-        stdp_model.model += ('dCa_syn/dt = fp8_multiply(Ca_syn, 55)/second : 1\n'
-                             + 'spiked : second\n')
-        stdp_model.on_pre += ('Ca_syn = fp8_add(Ca_syn, 127)\n'
-                              + 'spiked = t\n')
-        stdp_model.modify_model('on_post', 'Ca_syn', old_expr='Ca_pre')
-
-    # TODO should also find right ca_inc
-    # pre_neurons.namespace['Ca_inc'] = 1
-    # post_neurons.namespace['Ca_inc'] = 1
     stdp_synapse = create_synapses(pre_neurons,
                                    post_neurons,
                                    stdp_model,
                                    name='stdp_synapse')
 
-    # TODO organize fp8 as well
-    # TODO this should be a module/function,  e.g. add_tsv_scheme()
-    # TODO not sure this is the eta we want
-    stdp_synapse.namespace['eta'] = 2**-9*mV#0.01*mV
+    # TODO this should be a module/function,  e.g. add_tsv_scheme(), regardless of precision
+    stdp_synapse.namespace['eta'] = 2**-9*mV
     if args.precision == 'fp64':
         # TODO am I unecessarily iterating over all connections?
         stdp_synapse.run_regularly(
             '''delta_w = int(Ca_pre>0 and Ca_post<0)*(eta*Ca_pre) - int(Ca_pre<0 and Ca_post>0)*(eta*Ca_post)
-               w_plast += delta_w
+               w_plast = clip(w_plast + delta_w, 0*mV, 100*mV)
                ''',
             name='weight_update',
             dt=defaultclock.dt,
@@ -287,10 +262,6 @@ def stdp(args):
                                             variables=['Vm', 'g', 'Ca'],
                                             record=range(N_pre),
                                             name='statemon_pre_neurons')
-        ref_statemon_pre_neurons = StateMonitor(ref_pre_neurons,
-                                                variables=['Vm'],
-                                                record=range(N_pre),
-                                                name='ref_statemon_pre_neurons')
     statemon_post_neurons = StateMonitor(post_neurons,
                                          variables=['Vm', 'g', 'Ca'],
                                          record=range(N_post),
@@ -331,16 +302,8 @@ def stdp(args):
             plt.show()
 
             plt.clear_figure()
-            max_val = max(aux_plot(statemon_pre_neurons.Vm[0]))
-            norm_vm = [x/max_val
-                       for x in aux_plot(statemon_pre_neurons.Vm[0])]
             plt.plot(statemon_pre_neurons.t[delta_ti:delta_tf]/ms,
-                     norm_vm[delta_ti:delta_tf])
-            max_val = max(ref_statemon_pre_neurons.Vm[0])
-            norm_ref_vm = [x/max_val for x in ref_statemon_pre_neurons.Vm[0]]
-            plt.plot(ref_statemon_pre_neurons.t[delta_ti:delta_tf]/ms,
-                     norm_ref_vm[delta_ti:delta_tf])
-            #import pdb;pdb.set_trace()
+                     aux_plot(statemon_pre_neurons.Vm[0]))
             plt.show()
 
         elif args.protocol == 2:
@@ -362,22 +325,41 @@ def stdp(args):
             pairs_timing = (spikemon_post_neurons.t[:trial_duration]
                             - spikemon_post_neurons.t[:trial_duration][::-1])/ms
             plt.plot(pairs_timing,
-                     minifloat2decimal(statemon_post_synapse.w_plast[:, -1]))
+                     aux_plot(statemon_post_synapse.w_plast[:, -1]))
             plt.show()
 
             plt.clear_figure()
-            plt.plot(minifloat2decimal(statemon_pre_neurons.Ca[0][:100]))
-            plt.plot(minifloat2decimal(statemon_post_neurons.Ca[0][:100]))
+            plt.plot(aux_plot_Ca(statemon_pre_neurons.Ca[0][:100]))
+            plt.plot(aux_plot_Ca(statemon_post_neurons.Ca[0][:100]))
             plt.show()
 
             plt.clear_figure()
-            plt.plot(minifloat2decimal(statemon_pre_neurons.Ca[29][:100]))
-            plt.plot(minifloat2decimal(statemon_post_neurons.Ca[29][:100]))
+            plt.plot(aux_plot_Ca(statemon_pre_neurons.Ca[29][:100]))
+            plt.plot(aux_plot_Ca(statemon_post_neurons.Ca[29][:100]))
+            plt.show()
+
+            plt.clear_figure()
+            plt.scatter(spikemon_pre_neurons.t[:150]/ms, spikemon_pre_neurons.i[:150])
+            plt.scatter(spikemon_post_neurons.t[:150]/ms, spikemon_post_neurons.i[:150])
             plt.show()
 
         elif args.protocol == 3:
-            plt.hist(statemon_post_synapse.w_plast[:, -1])
+            plt.hist(aux_plot(statemon_post_synapse.w_plast[:, -1]))
             plt.show()
+
             plt.clear_figure()
-            plt.plot(minifloat2decimal(statemon_post_synapse.w_plast[0, :]))
+            plt.plot(aux_plot(statemon_post_synapse.w_plast[0, :]))
+            plt.plot(aux_plot(statemon_post_synapse.w_plast[500, :]))
+            plt.plot(aux_plot(statemon_post_synapse.w_plast[999, :]))
+            plt.show()
+
+            neu_r = neurons_rate(spikemon_pre_neurons, tmax/ms)
+            plt.clear_figure()
+            plt.plot(neu_r.times/q.ms, neu_r[:, 1].magnitude.flatten())
+            plt.plot(neu_r.times/q.ms, neu_r[:, 2].magnitude.flatten())
+            plt.show()
+
+            neu_r = neurons_rate(spikemon_post_neurons, tmax/ms)
+            plt.clear_figure()
+            plt.plot(neu_r.times/q.ms, neu_r.magnitude.flatten())
             plt.show()
