@@ -217,7 +217,6 @@ def decimal2minifloat(decimal_value, bitwise_logic=False, raise_warning=True):
     """ Converts a representable decimal value to 8-bit floating point.
         Use it with CAUTION as it does not check if decimal provided is
         actually supported in the implemented format.
-        TODO fix bug; converting 7 and below fails
 
     Args:
         decimal_value (int, float, list or numpy.array): decimal value to be
@@ -963,22 +962,18 @@ def fp8_add_stochastic(num1, num2, _vectorisation_idx):
     trunc_result = result >> aux_shift
     discarded_bits = ((result << N_BITS - aux_shift & REPR_MASK)
                       >> (N_BITS - aux_shift))
-    # TODO probably remove
-    #sticky_bit = discarded_bits & (2**(aux_shift - 1) - 1) != 0
-    #guard_bit = discarded_bits & 2**(aux_shift - 1) != 0
 
     # Note that negative zeros are not return from operations
     aux_ind = np.logical_and(val1_abs==val2_abs, opposite_signs)
     result_exponent[aux_ind] = 0
     result_sign[aux_ind] = 0
 
-    # TODO probably remove
-    ## Using LSB of trunc_result only. Guard bit together with LSB define
-    ## previous and next values (for round down and up, respectively)
-    #round_factor = guard_bit & (trunc_result | sticky_bit)
-
-    import pdb;pdb.set_trace()
-    round_factor = discarded_bits
+    lfsr_len = np.empty_like(_vectorisation_idx)
+    lfsr_len[:] = GUARD_WIDTH
+    aux_ind = magnitude_factor > 6
+    lfsr_len[aux_ind] += (magnitude_factor-6)
+    lfsr = np.floor(np.random.rand(len(_vectorisation_idx)) * (2**lfsr_len)).astype(int)
+    round_factor = (discarded_bits + lfsr) >> lfsr_len
 
     trunc_result = trunc_result + round_factor
     result_abs = (result_exponent<<FRAC_WIDTH) + trunc_result
@@ -993,7 +988,6 @@ def fp8_add_stochastic(num1, num2, _vectorisation_idx):
         return (result_sign << EXP_WIDTH+FRAC_WIDTH) + result_abs
 fp8_add_stochastic = Function(fp8_add_stochastic, arg_units=[1, 1],
     return_unit=1, auto_vectorise=True)
-# TODO cpp code
 cpp_code = """
 int fp8_add_stochastic(int num1, int num2, int _vectorisation_idx){
     unsigned char num1_sign, num1_exp, num1_abs, num1_normal;
@@ -1002,7 +996,7 @@ int fp8_add_stochastic(int num1, int num2, int _vectorisation_idx){
     unsigned char sign2, exp2, abs_val2, is_normal2;
     unsigned char magnitude_factor, aux_val;
     unsigned char int_repr1_abs, int_repr2_abs, aligned_repr2, aux_int_repr;
-    unsigned char sticky_bit, guard_bit, discarded_bits, round_factor;
+    unsigned char sticky_bit, lfsr_len, lfsr, discarded_bits, round_factor;
     unsigned char result, result_sign, result_exp, trunc_result, result_abs;
     unsigned char carry, num_leading_zero=0, num_shifts, aux_shift;
     bool opposite_signs;
@@ -1113,8 +1107,6 @@ int fp8_add_stochastic(int num1, int num2, int _vectorisation_idx){
     trunc_result = result >> aux_shift;
     discarded_bits = (((result << (N_BITS-aux_shift)) & REPR_MASK)
                       >> (N_BITS - aux_shift));
-    sticky_bit = (discarded_bits & ((1 << (aux_shift-1)) - 1)) != 0;
-    guard_bit = (discarded_bits & (1 << (aux_shift-1))) != 0;
 
     // Note that negative zeros are not return from operations
     if (abs_val1==abs_val2 && opposite_signs){
@@ -1122,9 +1114,12 @@ int fp8_add_stochastic(int num1, int num2, int _vectorisation_idx){
         result_sign = 0;
     }
 
-    // Using LSB of trunc_result only. Guard bit together with LSB define
-    // previous and next values (for round down and up, respectively)
-    round_factor = guard_bit & (trunc_result | sticky_bit);
+    lfsr_len = GUARD_WIDTH;
+    if (magnitude_factor > 6)
+        lfsr_len += (magnitude_factor-6);
+    lfsr = floor(rand(_vectorisation_idx) * (1 << lfsr_len));
+    round_factor = (discarded_bits+lfsr) >> lfsr_len;
+
     trunc_result = trunc_result + round_factor;
     result_abs = (result_exp<<FRAC_WIDTH) + trunc_result;
     // Dealing with overflow. Note that sign bit is used for comparison, so no
@@ -1135,7 +1130,9 @@ int fp8_add_stochastic(int num1, int num2, int _vectorisation_idx){
     return (result_sign << (EXP_WIDTH+FRAC_WIDTH)) + result_abs;
 }
 """
-fp8_add_stochastic.implementations.add_implementation('cpp', cpp_code)
+fp8_add_stochastic.implementations.add_implementation('cpp', cpp_code,
+    dependencies={'rand': DEFAULT_FUNCTIONS['rand'],
+                  'floor': DEFAULT_FUNCTIONS['floor']})
 
 
 def fp8_smaller_than(num1, num2, _vectorisation_idx):

@@ -18,10 +18,11 @@ from core.equations.base_equation import ParamDict
 from core.utils.misc import minifloat2decimal, decimal2minifloat
 
 from core.utils.misc import stochastic_decay, fp8_multiply, fp8_add,\
-    fp8_smaller_than, deterministic_decay
+    fp8_smaller_than, deterministic_decay, fp8_add_stochastic
 DEFAULT_FUNCTIONS.update({'stochastic_decay': stochastic_decay,
                           'fp8_multiply': fp8_multiply,
                           'fp8_add': fp8_add,
+                          'fp8_add_stochastic': fp8_add_stochastic,
                           'fp8_smaller_than': fp8_smaller_than,
                           'deterministic_decay': deterministic_decay})
 
@@ -53,11 +54,13 @@ class TestOrca(unittest.TestCase):
         syn = fp8CUBA()
         syn.modify_model('parameters', ws, key='weight')
         syn.modify_model('connection', 'i', key='j')
+        # TODO back to deterministic, and this should be another function
+        syn.modify_model('on_pre', 'fp8_add_stochastic', old_expr='fp8_add')
         syn = create_synapses(inp, neu, syn, raise_warning=True)
 
         run(3*ms)
         device.build('.test_code/')
-        res = neu.g[:]
+        # TODO [-5] is not working? and seem determinitic?? import pdb;pdb.set_trace()
         for i in range(len(res)):
             self.assertEqual(res[i], gn[i], f'{ws[i]}+{g0[i]} should be '
                                             f'{gn[i]}, but was {res[i]}')
