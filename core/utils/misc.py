@@ -969,7 +969,7 @@ def fp8_add_stochastic(num1, num2, _vectorisation_idx):
     result_sign[aux_ind] = 0
 
     lfsr_len = np.empty_like(_vectorisation_idx)
-    lfsr_len[:] = GUARD_WIDTH
+    lfsr_len[:] = GUARD_WIDTH + carry
     aux_ind = magnitude_factor > 6
     lfsr_len[aux_ind] += (magnitude_factor-6)
     lfsr = np.floor(np.random.rand(len(_vectorisation_idx)) * (2**lfsr_len)).astype(int)
@@ -1114,7 +1114,7 @@ int fp8_add_stochastic(int num1, int num2, int _vectorisation_idx){
         result_sign = 0;
     }
 
-    lfsr_len = GUARD_WIDTH;
+    lfsr_len = GUARD_WIDTH + carry;
     if (magnitude_factor > 6)
         lfsr_len += (magnitude_factor-6);
     lfsr = floor(rand(_vectorisation_idx) * (1 << lfsr_len));
