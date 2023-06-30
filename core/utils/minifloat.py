@@ -1,9 +1,10 @@
-from core.utils.misc import minifloat2decimal, fp8_add_stochastic, fp8_multiply
+from core.utils.misc import minifloat2decimal, fp8_add, fp8_add_stochastic,\
+    fp8_multiply
 import numpy as np
 import plotext as plt
 
 
-def minifloat_operations(num1, num2, operation):
+def minifloat_operations(num1, num2, operation, stochastic=False):
     """
     Useful when analysing and plotting minifloats and their arithmetic
     operations
@@ -25,7 +26,10 @@ def minifloat_operations(num1, num2, operation):
     if operation == 'mul':
         c_c = fp8_multiply(num1, num2, 1)
     if operation == 'add':
-        c_c = fp8_add_stochastic(num1, num2, 1)
+        if stochastic:
+            c_c = fp8_add_stochastic(num1, num2, 1)
+        else:
+            c_c = fp8_add(num1, num2, 1)
 
     c_next = c_c + 1
     c_prev = c_c - 1 if c_c > 0 else 129
