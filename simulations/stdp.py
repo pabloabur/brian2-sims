@@ -10,9 +10,10 @@ import numpy as np
 import feather
 import pandas as pd
 import quantities as q
+import sys
 
 from brian2 import run, device, defaultclock, scheduling_summary,\
-    SpikeGeneratorGroup, StateMonitor, SpikeMonitor, TimedArray, PoissonGroup
+    SpikeGeneratorGroup, StateMonitor, SpikeMonitor, TimedArray, PoissonInput
 from brian2 import mV, second, Hz, ms
 
 import plotext as plt
@@ -142,6 +143,8 @@ def stdp(args):
         def aux_plot_Ca(x): return x
         synapse_model = tsvCUBA()
         stdp_model = tsvSTDP()
+    else:
+       raise UserWarning('Precision not supported')
 
     if args.protocol == 1:
         N_pre, N_post = 2, 2
@@ -203,12 +206,33 @@ def stdp(args):
         neuron_model.modify_model('parameters', rng.uniform(5, 15, N_pre)*ms, key='tau_ca')
         pre_neurons = create_neurons(N_pre, neuron_model)
         pre_neurons.rates = 15*Hz
+    elif args.protocol == 4:
+        import pdb;pdb.set_trace()
+        Ne, Ni = 90000, 22500
+        poisson_spikes = PoissonInput(neurons, 'Vm', 9000, rates=2.32*Hz,
+                                      weight='Vm + _____wex')
+        neu.vm = 'clip((5.7 + 7.2*randn())*mV, 0.0, inf)'
+        incoming_input_weights = 45.61*pA
+        incoming_input_weights = 228.05*pA
+    # TODO unchanged for now: traces, neuron models, current models,
+    # poisson input, with a rate and sampled weights?
+    # create populations and connect with proper parameters
+    # maybe do the log synapse update
+    # no autapses
+    # p=.1
+    # delay 1.5ms; dt=0.1ms (no); duration 200s
+    # refrac_period?
+    # lambda .1; tau+- 20; alpha 1.057 * 0.1; mu .4; w0 .001
+    # wDist ?? 45.65pA,    // 0 - mean\n 3.99 // sd
+
 
     if args.protocol == 1 or args.protocol == 2:
         conn_condition = 'i==j'
     if args.protocol == 3:
         # None makes it all to all
         conn_condition = None
+    else:
+        raise UserWarning('Protocol not supported')
 
     stdp_model.modify_model('connection',
                             conn_condition,
