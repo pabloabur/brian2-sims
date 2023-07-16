@@ -148,11 +148,13 @@ def stdp(args):
     else:
        raise UserWarning('Precision not supported')
 
+    """ ================ Protocol specifications ================ """
     if args.protocol == 1:
         N_pre, N_post = 2, 2
         n_conns = N_pre
         sampled_weights = [11 for _ in range(n_conns)]
         static_weight = 120
+        conn_condition = 'i==j'
 
         pre_spikegenerator, post_spikegenerator, tmax = stimuli_protocol1()
         pre_neurons = create_neurons(2, neuron_model)
@@ -174,6 +176,8 @@ def stdp(args):
         tapre, tapost, tmax, N, trial_duration = stimuli_protocol2()
         N_pre, N_post = N, N
         n_conns = N
+        conn_condition = 'i==j'
+
         sampled_weights = [50 for _ in range(n_conns)]
         # TODO organize fp8 as well
         # TODO for fp8? The idea is to inject current so neurons spikes, but maybe I dont have to
@@ -203,6 +207,7 @@ def stdp(args):
         n_conns = N_pre
         sampled_weights = rng.gamma(.1, 1.75, n_conns)
         tmax = 10000 * ms
+        conn_condition = None
 
         post_neurons = create_neurons(N_post, neuron_model)
         neuron_model.modify_model('threshold', 'rand()<rates*dt')
@@ -213,120 +218,114 @@ def stdp(args):
 
     elif args.protocol == 4:
         # TODO
-        #tmax = 200000 * ms
+        tmax = 200000 * ms
         #Ne, Ni = 90000, 22500
-        tmax = 2000 * ms
         Ne, Ni = 90, 22
         Nt = Ne + Ni
+        conn_condition = None
+        exc_delay = 1.5
+
         neurons = create_neurons(Ne+Ni,
                                  neuron_model)
         exc_neurons = neurons[:Ne]
         inh_neurons = neurons[Ne:]
         neurons.Vm = np.clip(rng.normal(5.7, 7.2, Nt), 0, np.inf)*mV
-        # Silly way to make protocol compatible with others
-        pre_neurons, post_neurons = inh_neurons, exc_neurons
-        N_pre, N_post = Ni, Ne
+        # N.B. relative to pre and post populations of stdp_synapse
+        pre_neurons, post_neurons = exc_neurons, neurons
+        N_pre, N_post = Ne, Nt
 
-        ext_weights = 4.561*mV
-        exc_weights = ext_weights/mV
+        ext_weights = .25*mV# TODO 4.561*mV
+        exc_weights = 4.561
         inh_weights = 5 * exc_weights
         poisson_spikes = PoissonInput(neurons, 'g', 9000, rate=2.32*Hz,
                                       weight='ext_weights')
 
         sources_e, targets_e = generate_connection_indices(Ne, Nt, .1)
-        sources_i, targets_i = generate_connection_indices(Ni, Nt, .1)
-
-        run_namespace.update({'ext_weights': ext_weights})
-
-    if args.protocol == 1 or args.protocol == 2:
-        conn_condition = 'i==j'
-    elif args.protocol == 3:
-        # None makes it all to all
-        conn_condition = None
-    else:
-        raise UserWarning('Protocol not supported')
-
-    if args.protocol == 4:
         stdp_model.modify_model('connection', sources_e, key='i')
         stdp_model.modify_model('connection', targets_e, key='j')
+        sources_i, targets_i = generate_connection_indices(Ni, Nt, .1)
         synapse_model.modify_model('connection', sources_i, key='i')
         synapse_model.modify_model('connection', targets_i, key='j')
-        ###### TODO maybe this go up
-        exc_delay = 1.5;
-        sampled_delay = np.rint(np.clip(rng.normal(exc_delay,
-                                                   1.5/2,
-                                                   len(sources_e)),
-                                        1, np.inf))*ms
 
         sampled_weights = np.clip(rng.normal(exc_weights,
                                              exc_weights/10,
-                                             len(sources_e))
-                                  0, np.inf)*mV
-        stdp_model.modify_model('parameters', sampled_weights, key='w_plast')
+                                             len(sources_e)),
+                                  0, np.inf)
+
+        sampled_delay = np.rint(np.clip(rng.normal(exc_delay,
+                                                   exc_delay/2,
+                                                   len(sources_e)),
+                                        1, np.inf))*ms
+        stdp_model.modify_model('parameters', sampled_delay, key='delay')
+        sampled_delay = np.rint(np.clip(rng.normal(exc_delay,
+                                                   exc_delay/2,
+                                                   len(sources_i)),
+                                        1, np.inf))*ms
+        synapse_model.modify_model('parameters', sampled_delay, key='delay')
 
         synapse_model.modify_model('namespace', -1, key='w_factor')
-        sampled_weights = np.clip(rng.normal(inh_weights,
+        inh_sampled_weights = np.clip(rng.normal(inh_weights,
                                              inh_weights/10,
-                                             len(sources_i))
+                                             len(sources_i)),
                                   0, np.inf)*mV
         synapse_model.modify_model('parameters',
-                                   sampled_weights,
+                                   inh_sampled_weights,
                                    key='weight')
-        pre_synapse = create_synapses(pre_spikegenerator,
-                                      pre_neurons,
-                                      synapse_model,
-                                      name='static_pre_synapse')
-        #####
-    else:
-        stdp_model.modify_model('connection',
-                                conn_condition,
-                                key='condition')
 
-    # TODO uncomment
-    #if args.precision == 'fp8':
-    #    sampled_weights = aux_w_sample(sampled_weights)
-    #if args.precision == 'fp64':
-    #    sampled_weights = aux_w_sample(sampled_weights)
-    #stdp_model.modify_model('parameters',
-    #                        sampled_weights,
-    #                        key='w_plast')
+        pre_synapse = create_synapses(inh_neurons,
+                                      neurons,
+                                      synapse_model)
 
-    #stdp_synapse = create_synapses(pre_neurons,
-    #                               post_neurons,
-    #                               stdp_model,
-    #                               name='stdp_synapse')
+        run_namespace.update({'ext_weights': ext_weights})
 
-    ## TODO this should be a module/function,  e.g. add_tsv_scheme(), regardless of precision
-    #stdp_synapse.namespace['eta'] = 2**-9*mV
-    #if args.precision == 'fp64':
-    #    # TODO am I unecessarily iterating over all connections?
-    #    stdp_synapse.run_regularly(
-    #        '''delta_w = int(Ca_pre>0 and Ca_post<0)*(eta*Ca_pre) - int(Ca_pre<0 and Ca_post>0)*(eta*Ca_post)
-    #           w_plast = clip(w_plast + delta_w, 0*mV, 100*mV)
-    #           ''',
-    #        name='weight_update',
-    #        dt=defaultclock.dt,
-    #        when='after_resets',
-    #        order=0)
-    #    pre_neurons.run_regularly(
-    #        'Ca = Ca*int(Ca>0) - Ca*int(Ca<0)',
-    #        name='clear_spike_flag_pre',
-    #        dt=defaultclock.dt,
-    #        when='after_resets',
-    #        order=1)
-    #    post_neurons.run_regularly(
-    #        'Ca = Ca*int(Ca>0) - Ca*int(Ca<0)',
-    #        name='clear_spike_flag_post',
-    #        dt=defaultclock.dt,
-    #        when='after_resets',
-    #        order=1)
+    """ ================ General specifications ================ """
+    stdp_model.modify_model('connection',
+                            conn_condition,
+                            key='condition')
+    stdp_model.modify_model('parameters',
+                            aux_w_sample(sampled_weights),
+                            key='w_plast')
 
-    # Setting up monitors
-    spikemon_pre_neurons = SpikeMonitor(pre_neurons,
-                                        name='spikemon_pre_neurons')
+    stdp_synapse = create_synapses(pre_neurons,
+                                   post_neurons,
+                                   stdp_model,
+                                   name='stdp_synapse')
+
+    # TODO this should be a module/function,  e.g. add_tsv_scheme(), regardless of precision
+    stdp_synapse.namespace['eta'] = 2**-9*mV
+    if args.precision == 'fp64':
+       # TODO am I unecessarily iterating over all connections?
+       stdp_synapse.run_regularly(
+           # TODO was delta_w = int(Ca_pre>0 and Ca_post<0)*(eta*Ca_pre) - int(Ca_pre<0 and Ca_post>0)*(eta*Ca_post)
+           '''delta_w = int(Ca_pre>0 and Ca_post<0)*(eta*Ca_pre*(w_plast/mV)**0.4) - int(Ca_pre<0 and Ca_post>0)*(eta*Ca_post*(w_plast/mV))
+              w_plast = clip(w_plast + delta_w, 0*mV, 100*mV)
+              ''',
+           name='weight_update',
+           dt=defaultclock.dt,
+           when='after_resets',
+           order=0)
+       # In protocol 4 only, the post neurons include the pre neurons
+       if args.protocol != 4:
+            pre_neurons.run_regularly(
+                'Ca = Ca*int(Ca>0) - Ca*int(Ca<0)',
+                name='clear_spike_flag_pre',
+                dt=defaultclock.dt,
+                when='after_resets',
+                order=1)
+       post_neurons.run_regularly(
+           'Ca = Ca*int(Ca>0) - Ca*int(Ca<0)',
+           name='clear_spike_flag_post',
+           dt=defaultclock.dt,
+           when='after_resets',
+           order=1)
+
+    """ ================ Setting up monitors ================ """
+    if args.protocol != 4:
+        spikemon_pre_neurons = SpikeMonitor(pre_neurons,
+                                            name='spikemon_pre_neurons')
     spikemon_post_neurons = SpikeMonitor(post_neurons,
                                          name='spikemon_post_neurons')
-    if args.protocol != 3:
+    if args.protocol < 3:
         statemon_pre_neurons = StateMonitor(pre_neurons,
                                             variables=['Vm', 'g', 'Ca'],
                                             record=range(N_pre),
@@ -335,17 +334,16 @@ def stdp(args):
                                          variables=['Vm', 'g', 'Ca'],
                                          record=range(N_post),
                                          name='statemon_post_neurons')
-    #statemon_post_synapse = StateMonitor(stdp_synapse,
-    #                                     variables=['w_plast'],
-    #                                     record=range(N_pre),
-    #                                     name='statemon_post_synapse')
+    statemon_post_synapse = StateMonitor(stdp_synapse,
+                                        variables=['w_plast'],
+                                        record=range(len(sources_e)),
+                                        name='statemon_post_synapse')
 
     run(tmax, namespace=run_namespace)
 
     if args.backend == 'cpp_standalone':
         device.build(args.code_path)
 
-    import pdb;pdb.set_trace()
     if not args.quiet:
         if args.protocol == 1:
             delta_ti = 0
@@ -433,3 +431,33 @@ def stdp(args):
             plt.clear_figure()
             plt.plot(neu_r.times/q.ms, neu_r.magnitude.flatten())
             plt.show()
+
+        elif args.protocol == 4:
+            max_weight_idx = np.where(stdp_synapse.w_plast==max(stdp_synapse.w_plast))[0]
+            target_id = stdp_synapse.j[max_weight_idx[0]]
+            plt.clear_figure()
+            plt.hist(np.array(stdp_synapse.w_plast/mV)[stdp_synapse.j==target_id])
+            plt.title('Weights targetting a neuron')
+            plt.show()
+
+            source_ids = np.array(stdp_synapse.i)[stdp_synapse.j==target_id]
+            n_incoming = np.shape(statemon_post_synapse.w_plast[stdp_synapse.j==target_id, :])[0]
+            plt.clear_figure()
+            for x in range(n_incoming):
+                plt.plot(np.array(statemon_post_synapse.w_plast/mV)[stdp_synapse.j==target_id, :][x, :])
+            plt.title(f'Neurons {source_ids} targeting {target_id} over time')
+            plt.show()
+
+
+            plt.clear_figure()
+            plt.hist(stdp_synapse.w_plast/mV)
+            plt.title('Final distribution of weights')
+            plt.show()
+
+            neu_r = neurons_rate(spikemon_post_neurons, tmax/ms)
+            plt.clear_figure()
+            plt.plot(neu_r.times/q.ms, neu_r[:, target_id].magnitude.flatten())
+            plt.plot(neu_r.times/q.ms, neu_r[:, source_ids[0]].magnitude.flatten())
+            plt.title('Rate of some neurons')
+            plt.show()
+            import pdb;pdb.set_trace()
