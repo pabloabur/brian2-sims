@@ -10,9 +10,7 @@ class tsvCUBA(BaseSynapse):
         self.model = '''
             weight : volt
             '''
-        self.on_pre = '''
-            g_post += (weight*w_factor)
-            '''
+        self.on_pre = ParamDict({'pre': 'g_post += (weight*w_factor)'})
         self.namespace = ParamDict({
             'w_factor': 1,
             })

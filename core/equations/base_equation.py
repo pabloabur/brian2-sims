@@ -95,6 +95,7 @@ class BaseSynapse(BaseEquation):
         super().__init__()
         self.on_pre = ''
         self.on_post = ''
+        self.on_event = 'spike'
         self.connection = {'condition': None, 'i': None, 'j': None,
                            'p': 1.}
 
@@ -104,3 +105,4 @@ class BaseNeuron(BaseEquation):
         self.threshold = ''
         self.refractory = ''
         self.reset = ''
+        self.events = None

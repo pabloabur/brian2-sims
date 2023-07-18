@@ -30,6 +30,7 @@ class tsvLIF(BaseNeuron):
             Ca += Ca_inc
             Ca *= -1
             '''
+        self.events = ParamDict({'active_Ca': 'Ca != 0'})
         self.namespace = ParamDict({
             'Cm': 200*pF,
             'gl': 10*nS,

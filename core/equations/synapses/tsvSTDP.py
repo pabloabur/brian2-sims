@@ -9,7 +9,13 @@ class tsvSTDP(tsvCUBA):
         """
         super().__init__()
         self.modify_model('model', 'w_plast ', old_expr='weight')
-        self.modify_model('on_pre', 'w_plast ', old_expr='weight')
+        self.modify_model('on_pre', 'g_post += (w_plast*w_factor)', key='pre')
+        self.on_pre = ParamDict({
+            **self.on_pre,
+            **{'stdp_fanout': '''
+                delta_w = int(Ca_pre>0 and Ca_post<0)*(eta*Ca_pre) - int(Ca_pre<0 and Ca_post>0)*(eta*Ca_post)
+                w_plast = clip(w_plast + delta_w, 0*mV, 100*mV)'''}})
+        self.on_event = ParamDict({'pre': 'spike', 'stdp_fanout': 'active_Ca'})
 
         self.parameters = ParamDict({**self.parameters,
                                      **{'w_plast': 0.5*mV}}
