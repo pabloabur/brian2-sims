@@ -13,7 +13,8 @@ import quantities as q
 import sys
 
 from brian2 import run, device, defaultclock, scheduling_summary,\
-    SpikeGeneratorGroup, StateMonitor, SpikeMonitor, TimedArray, PoissonInput
+    SpikeGeneratorGroup, StateMonitor, SpikeMonitor, TimedArray, PoissonInput,\
+    prefs, EventMonitor
 from brian2 import mV, second, Hz, ms
 
 import plotext as plt
@@ -127,6 +128,8 @@ def stimuli_protocol2():
 
 def stdp(args):
     defaultclock.dt = args.timestep * ms
+    prefs.core.network.default_schedule = ['start', 'groups', 'thresholds',
+                                           'resets', 'synapses', 'end']
     rng = np.random.default_rng()
     run_namespace = {}
 
@@ -247,14 +250,15 @@ def stdp(args):
         synapse_model.modify_model('connection', sources_i, key='i')
         synapse_model.modify_model('connection', targets_i, key='j')
 
+        n_conns = len(sources_e)
         sampled_weights = np.clip(rng.normal(exc_weights,
                                              exc_weights/10,
-                                             len(sources_e)),
+                                             n_conns),
                                   0, np.inf)
 
         sampled_delay = np.rint(np.clip(rng.normal(exc_delay,
                                                    exc_delay/2,
-                                                   len(sources_e)),
+                                                   n_conns),
                                         1, np.inf))*ms
         stdp_model.modify_model('parameters', sampled_delay, key='delay')
         sampled_delay = np.rint(np.clip(rng.normal(exc_delay,
@@ -286,37 +290,31 @@ def stdp(args):
                             aux_w_sample(sampled_weights),
                             key='w_plast')
 
+    # TODO choose one delta w
+    #delta_w = int(Ca_pre>0 and Ca_post<0)*(eta*Ca_pre*(w_plast/mV)**0.4) - int(Ca_pre<0 and Ca_post>0)*(eta*Ca_post*(w_plast/mV))
+
     stdp_synapse = create_synapses(pre_neurons,
                                    post_neurons,
                                    stdp_model,
                                    name='stdp_synapse')
 
-    # TODO this should be a module/function,  e.g. add_tsv_scheme(), regardless of precision
+    # TODO this should be a module/function,  e.g. add_tsv_scheme(), regardless of precision,
+    # where run_reg options are sent and a flag is used when groups are being created
     stdp_synapse.namespace['eta'] = 2**-9*mV
     if args.precision == 'fp64':
-       # TODO am I unecessarily iterating over all connections?
-       stdp_synapse.run_regularly(
-           # TODO was delta_w = int(Ca_pre>0 and Ca_post<0)*(eta*Ca_pre) - int(Ca_pre<0 and Ca_post>0)*(eta*Ca_post)
-           '''delta_w = int(Ca_pre>0 and Ca_post<0)*(eta*Ca_pre*(w_plast/mV)**0.4) - int(Ca_pre<0 and Ca_post>0)*(eta*Ca_post*(w_plast/mV))
-              w_plast = clip(w_plast + delta_w, 0*mV, 100*mV)
-              ''',
-           name='weight_update',
-           dt=defaultclock.dt,
-           when='after_resets',
-           order=0)
        # In protocol 4 only, the post neurons include the pre neurons
        if args.protocol != 4:
             pre_neurons.run_regularly(
                 'Ca = Ca*int(Ca>0) - Ca*int(Ca<0)',
                 name='clear_spike_flag_pre',
                 dt=defaultclock.dt,
-                when='after_resets',
+                when='after_synapses',
                 order=1)
        post_neurons.run_regularly(
            'Ca = Ca*int(Ca>0) - Ca*int(Ca<0)',
            name='clear_spike_flag_post',
            dt=defaultclock.dt,
-           when='after_resets',
+           when='after_synapses',
            order=1)
 
     """ ================ Setting up monitors ================ """
@@ -336,8 +334,9 @@ def stdp(args):
                                          name='statemon_post_neurons')
     statemon_post_synapse = StateMonitor(stdp_synapse,
                                         variables=['w_plast'],
-                                        record=range(len(sources_e)),
+                                        record=range(n_conns),
                                         name='statemon_post_synapse')
+    active_monitor = EventMonitor(pre_neurons, 'active_Ca', 'Ca')
 
     run(tmax, namespace=run_namespace)
 
@@ -433,6 +432,12 @@ def stdp(args):
             plt.show()
 
         elif args.protocol == 4:
+            num_fetches = {'pre': spikemon_post_neurons.num_spikes,
+                           'fanout': active_monitor.num_events}
+            print(f'Potential memory fetches for each strategy:\nConventional:'
+                  f' {num_fetches["pre"]/1e6}M\nFanout: '
+                  f'{2*num_fetches["fanout"]/1e6}M')
+
             max_weight_idx = np.where(stdp_synapse.w_plast==max(stdp_synapse.w_plast))[0]
             target_id = stdp_synapse.j[max_weight_idx[0]]
             plt.clear_figure()
@@ -460,4 +465,3 @@ def stdp(args):
             plt.plot(neu_r.times/q.ms, neu_r[:, source_ids[0]].magnitude.flatten())
             plt.title('Rate of some neurons')
             plt.show()
-            import pdb;pdb.set_trace()
