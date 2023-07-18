@@ -435,8 +435,8 @@ def stdp(args):
             num_fetches = {'pre': spikemon_post_neurons.num_spikes,
                            'fanout': active_monitor.num_events}
             print(f'Potential memory fetches for each strategy:\nConventional:'
-                  f' {num_fetches["pre"]/1e6}M\nFanout: '
-                  f'{2*num_fetches["fanout"]/1e6}M')
+                  f' {2*num_fetches["pre"]/1e6}M\nFanout: '
+                  f'{num_fetches["fanout"]/1e6}M')
 
             max_weight_idx = np.where(stdp_synapse.w_plast==max(stdp_synapse.w_plast))[0]
             target_id = stdp_synapse.j[max_weight_idx[0]]
