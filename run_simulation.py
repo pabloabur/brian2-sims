@@ -4,6 +4,7 @@ from simulations.fp8_potjans_diesmann import fp8_potjans_diesmann
 from simulations.neuron_synapse_models import neuron_synapse_models
 from simulations.stdp import stdp
 from simulations.balanced_network import balanced_network
+from simulations.balanced_network_stdp import balanced_network_stdp
 
 import os
 from datetime import datetime
@@ -18,7 +19,6 @@ DEFAULT_FUNCTIONS.update({'stochastic_decay': stochastic_decay,
                           'fp8_add': fp8_add,
                           'fp8_smaller_than': fp8_smaller_than,
                           'deterministic_decay': deterministic_decay})
-
 
 parser = argparse.ArgumentParser(
     description='Main file that executes specified simulation',
@@ -135,6 +135,16 @@ subparser_stdp.add_argument('--precision',
                                  f'8 and 64')
 subparser_stdp.set_defaults(func=stdp)
 
+subparser_balance_stdp = subparsers.add_parser(
+    'balance_stdp',
+    formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+subparser_balance_stdp.add_argument('--precision',
+                               type=str,
+                            default='fp64',
+                               help=f'Bit precision used. Currently only supports '
+                                    f'8 and 64')
+subparser_balance_stdp.set_defaults(func=balanced_network_stdp)
+
 args = parser.parse_args()
 
 os.makedirs(args.save_path, exist_ok=True)
@@ -142,7 +152,10 @@ os.makedirs(args.save_path, exist_ok=True)
 if args.backend == 'numpy':
     prefs.codegen.target = args.backend
 elif args.backend == 'cpp_standalone':
-    set_device(args.backend, build_on_run=False)
+    set_device('cuda_standalone')
+elif args.backend == 'cuda_standalone':
+    import brian2cuda
+    set_device('cuda_standalone')
 elif args.backend == 'markdown':
     set_device(args.backend, filename='model_description')
 else:
