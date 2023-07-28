@@ -66,7 +66,7 @@ def balanced_network_stdp(args):
     exc_weights = 4.561
     inh_weights = 5 * exc_weights
     conn_condition = 'i!=j'
-    p_conn = .1
+    p_conn = .00001 # TODO was .1
 
     neuron_model.modify_model('parameters',
                               'clip(5.7 + randn()*7.2, 0, inf)*mV',
@@ -126,59 +126,71 @@ def balanced_network_stdp(args):
 
     """ ================ Setting up monitors ================ """
     spikemon_neurons = SpikeMonitor(neurons,
-                                    name='spikemon_neurons',
-                                    record=False)
+                                    name='spikemon_neurons')
+    # TODO this is not a neuron; maybe connections here
+    # TODO might just calculate avg inc conn per neuron? what for...
+    # TODO dont think i'll be able to plot that many better just look at rate and final w
+    # TODO ca is alsoo good, could also clip it too
+    # TODO maybe average weights and show it overtime?
     stdpmon_incoming = StateMonitor(mon_stdp_1,
                                     variables=['w_plast'],
-                                    record=True,
+                                    record=[0, 1],
                                     dt=50*ms)
     stdpmon_outgoing = StateMonitor(mon_stdp_3,
                                     variables=['w_plast'],
-                                    record=True,
+                                    record=[0, 1],
                                     dt=50*ms)
     #statemon_neurons = StateMonitor(neurons,
     #                                     variables=['Vm', 'g', 'Ca'],
     #                                     record=range(N_post),
     #                                     name='statemon_neurons')
-    active_monitor = EventMonitor(neurons, 'active_Ca', record=False)
+    active_monitor = EventMonitor(neurons, 'active_Ca')
 
     run(tmax, report='stdout', namespace=run_namespace)
     gc.collect()
 
+    import pdb;pdb.set_trace()
     if args.backend == 'cpp_standalone':
-        device.build(args.code_path, clean=True)
+        device.build(args.code_path) # TODO clean=True?
 
     if not args.quiet:
         num_fetches = {'pre': spikemon_neurons.num_spikes,
                        'fanout': active_monitor.num_events}
+        print(num_fetches)
         print(f'Potential memory fetches for each strategy:\nConventional:'
               f' {2*num_fetches["pre"]/1e6}M\nFanout: '
               f'{num_fetches["fanout"]/1e6}M')
+        print('shape of wplast')
+        print(np.shape(stdp_synapse.w_plast))
+        print('shape of spkmon numspike')
+        print(np.shape(spikemon_neurons.num_spikes))
+        print('shape of spkmon numevents')
+        print(np.shape(active_monitor.num_events))
+        print('shape of spk t of each above')
+        print(np.shape(spikemon_neurons.t))
+        print(np.shape(active_monitor.t))
 
         max_weight_idx = np.where(stdp_synapse.w_plast/mV==np.max(stdp_synapse.w_plast/mV))[0]
         target_id = stdp_synapse.j[max_weight_idx[0]]
+        #source_ids = np.array(stdp_synapse.i)[stdp_synapse.j==target_id]
+        #n_incoming = np.shape(statemon_post_synapse.w_plast[stdp_synapse.j==target_id, :])[0]
+
         plt.clear_figure()
         plt.hist(np.array(stdp_synapse.w_plast/mV)[stdp_synapse.j==target_id])
         plt.title('Weights targetting a neuron')
-        plt.show()
-
-        #source_ids = np.array(stdp_synapse.i)[stdp_synapse.j==target_id]
-        #n_incoming = np.shape(statemon_post_synapse.w_plast[stdp_synapse.j==target_id, :])[0]
-        #plt.clear_figure()
-        #for x in range(n_incoming):
-        #    plt.plot(np.array(statemon_post_synapse.w_plast/mV)[stdp_synapse.j==target_id, :][x, :])
-        #plt.title(f'Neurons {source_ids} targeting {target_id} over time')
-        #plt.show()
-
+        plt.build()
+        plt.save_fig(f'{args.save_path}/fig1.txt', keep_colors=True)
 
         plt.clear_figure()
         plt.hist(stdp_synapse.w_plast/mV)
         plt.title('Final distribution of weights')
-        plt.show()
+        plt.build()
+        plt.save_fig(f'{args.save_path}/fig2.txt', keep_colors=True)
 
-        #neu_r = neurons_rate(spikemon_neurons, tmax/ms)
-        #plt.clear_figure()
-        #plt.plot(neu_r.times/q.ms, neu_r[:, target_id].magnitude.flatten())
-        #plt.plot(neu_r.times/q.ms, neu_r[:, source_ids[0]].magnitude.flatten())
-        #plt.title('Rate of some neurons')
-        #plt.show()
+        neu_r = neurons_rate(spikemon_neurons, tmax/ms)
+        plt.clear_figure()
+        plt.plot(neu_r.times/q.ms, neu_r[:, target_id].magnitude.flatten())
+        plt.plot(neu_r.times/q.ms, neu_r[:, source_ids[0]].magnitude.flatten())
+        plt.title('Rate of some neurons')
+        plt.build()
+        plt.save_fig(f'{args.save_path}/fig3.txt', keep_colors=True)
