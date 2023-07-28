@@ -7,12 +7,21 @@ First, build a container with
 docker build -t app .
 ```
 
-then run it with the command below. Alternatively, add the desired command at the end, e.g. `python run_simulation -h`
+then run the command below inside the project folder:
+
 ```
-docker run -it --rm -v $(pwd)/simulations:/tmp/simulations:ro -v $(pwd)/sim_data:/tmp/sim_data app
+docker run -it --rm -v .:/home/app:rw app
 ```
 
-Type `python run_simulation -h` to see the simulations available and their options.
+The available simulations and their options will be printed, so you can run a simulation with e.g.
+
+```
+docker run -it --rm -v .:/home/app:rw app models
+```
+
+You might have to change permission for the volume that will be mounted (e.g. `chmod -R +2 brian2-sims`), as some simulations generate and save files.
+
+The docker images were tagged and pushed to dockerhub, so you can also pull the image with `docker pull pabloabur/app_cuda` and run this image as shown above. Note that --gpu and --entrypoint flags can be used for using GPUs and probing the container, respectively. However, running with GPU support might require nvidia-container-toolkit.
 
 We used conda-based environment because if you are working on a remote server, conda might be a better option when linking other libraries/resources (e.g. C++).
 
