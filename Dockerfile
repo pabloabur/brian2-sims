@@ -10,5 +10,5 @@ RUN apt update && apt install -y cmake g++ curl && apt clean \
     && micromamba shell init --shell bash -r /opt/micromamba
 
 WORKDIR /app
-ENTRYPOINT ["micromamba", "run", "-n", "base", "python", "run_simulation.py"]
+ENTRYPOINT ["micromamba", "run", "-n", "base", "-r", "/opt/micromamba", "python", "run_simulation.py"]
 CMD ["-h"]

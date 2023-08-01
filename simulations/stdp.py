@@ -340,7 +340,7 @@ def stdp(args):
 
     run(tmax, namespace=run_namespace)
 
-    if args.backend == 'cpp_standalone':
+    if args.backend == 'cpp_standalone' or args.backend == 'cuda_standalone':
         device.build(args.code_path)
 
     if not args.quiet:

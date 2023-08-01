@@ -149,8 +149,7 @@ def balanced_network_stdp(args):
     run(tmax, report='stdout', namespace=run_namespace)
     gc.collect()
 
-    import pdb;pdb.set_trace()
-    if args.backend == 'cpp_standalone':
+    if args.backend == 'cpp_standalone' or args.backend == 'cuda_standalone':
         device.build(args.code_path) # TODO clean=True?
 
     if not args.quiet:
@@ -187,10 +186,10 @@ def balanced_network_stdp(args):
         plt.build()
         plt.save_fig(f'{args.save_path}/fig2.txt', keep_colors=True)
 
-        neu_r = neurons_rate(spikemon_neurons, tmax/ms)
-        plt.clear_figure()
-        plt.plot(neu_r.times/q.ms, neu_r[:, target_id].magnitude.flatten())
-        plt.plot(neu_r.times/q.ms, neu_r[:, source_ids[0]].magnitude.flatten())
-        plt.title('Rate of some neurons')
-        plt.build()
-        plt.save_fig(f'{args.save_path}/fig3.txt', keep_colors=True)
+        #neu_r = neurons_rate(spikemon_neurons, tmax/ms)
+        #plt.clear_figure()
+        #plt.plot(neu_r.times/q.ms, neu_r[:, target_id].magnitude.flatten())
+        #plt.plot(neu_r.times/q.ms, neu_r[:, source_ids[0]].magnitude.flatten())
+        #plt.title('Rate of some neurons')
+        #plt.build()
+        #plt.save_fig(f'{args.save_path}/fig3.txt', keep_colors=True)

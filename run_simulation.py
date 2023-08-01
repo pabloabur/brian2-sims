@@ -155,11 +155,7 @@ elif args.backend == 'cpp_standalone':
     set_device('cpp_standalone', build_on_run=False)
 elif args.backend == 'cuda_standalone':
     import brian2cuda
-    # TODO dont think I need this anymore
-    #import os
-    #prefs.devices.cuda_standalone.cuda_backend.cuda_path = '/apps/cuda/12.0.0'
-    #os.environ['LD_LIBRARY_PATH'] += ":/apps/cuda/12.0.0/lib64"
-    set_device('cuda_standalone')
+    set_device('cuda_standalone', build_on_run=False)
 elif args.backend == 'markdown':
     set_device(args.backend, filename='model_description')
 else:
