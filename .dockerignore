@@ -1,4 +1,3 @@
-sim_data/
-simulations/
+sim_data/*
 tags/
 code/
