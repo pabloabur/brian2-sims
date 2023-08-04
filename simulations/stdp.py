@@ -351,13 +351,15 @@ def stdp(args):
                         spikemon_pre_neurons.i[delta_ti:delta_tf])
             plt.scatter(spikemon_post_neurons.t[delta_ti:delta_tf]/ms,
                         spikemon_post_neurons.i[delta_ti:delta_tf])
-            plt.show()
+            plt.build()
+            plt.save_fig(f'{args.save_path}/fig1.txt')
 
             plt.clear_figure()
             plt.plot(statemon_post_synapse.t[delta_ti:delta_tf]/ms,
                      aux_plot(
                          statemon_post_synapse.w_plast[0][delta_ti:delta_tf]))
-            plt.show()
+            plt.build()
+            plt.save_fig(f'{args.save_path}/fig2.txt')
 
             plt.clear_figure()
             plt.plot(statemon_post_neurons.t[delta_ti:delta_tf]/ms,
@@ -366,12 +368,14 @@ def stdp(args):
             plt.plot(statemon_pre_neurons.t[delta_ti:delta_tf]/ms,
                      aux_plot_Ca(
                          statemon_pre_neurons.Ca[0][delta_ti:delta_tf]))
-            plt.show()
+            plt.build()
+            plt.save_fig(f'{args.save_path}/fig3.txt')
 
             plt.clear_figure()
             plt.plot(statemon_pre_neurons.t[delta_ti:delta_tf]/ms,
                      aux_plot(statemon_pre_neurons.Vm[0]))
-            plt.show()
+            plt.build()
+            plt.save_fig(f'{args.save_path}/fig4.txt')
 
         elif args.protocol == 2:
             labels = ('indices', 'times', 'type')

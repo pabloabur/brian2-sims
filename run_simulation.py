@@ -139,10 +139,16 @@ subparser_balance_stdp = subparsers.add_parser(
     'balance_stdp',
     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 subparser_balance_stdp.add_argument('--precision',
-                               type=str,
-                            default='fp64',
-                               help=f'Bit precision used. Currently only supports '
-                                    f'8 and 64')
+                                    type=str,
+                                    default='fp64',
+                                    help=f'Bit precision used. Currently only supports '
+                                         f'8 and 64')
+subparser_balance_stdp.add_argument('--protocol',
+                                    type=int,
+                                    default=1,
+                                    help=f'Type of simulation. 1 is for '
+                                         f'general statistics from spikes '
+                                         f'and 2 is for hardware-like evaluation.')
 subparser_balance_stdp.set_defaults(func=balanced_network_stdp)
 
 args = parser.parse_args()
