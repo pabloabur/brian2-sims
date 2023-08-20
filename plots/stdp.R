@@ -21,9 +21,6 @@ N_exc <- metadata$N_exc
 df_raster <- read.csv(file.path(data_path, 'output_spikes.csv'))
 df_variables <- read.csv(file.path(data_path, 'output_vars.csv'))
 
-df_rates_total <- df_raster %>%
-                  group_by(id) %>%
-                  summarise(rate=n()/tsim)
 df_rates_init <- df_raster %>%
                  filter(time_ms>0 & time_ms<2000) %>%
                  group_by(id) %>%
@@ -33,33 +30,26 @@ df_rates_final <- df_raster %>%
                   group_by(id) %>%
                   summarise(rate=n()/2)
 
-freq_init <- df_rates_init %>%
-        ggplot(aes(rate)) + theme_bw() +
-        geom_histogram()
-freq_final <- df_rates_final %>%
-        ggplot(aes(rate)) + theme_bw() +
-        geom_histogram()
-freq_total <- df_rates_total %>%
-        ggplot(aes(rate)) + theme_bw() +
+df_rates_final$group <- 'final'
+df_rates_init$group <- 'initial'
+freq <- bind_rows(df_rates_init, df_rates_final) %>%
+        ggplot(aes(x=rate, group=group, color=group, fill=group)) + theme_bw() +
         geom_histogram()
 
-# TODO color=id is wrong, look at filter id==1 or ggplotly
+df_variables$id<-as.character(df_variables$id)
 ca_trace <- df_variables %>%
             filter(variable=='Ca') %>%
-            ggplot(aes(time_ms, value, color=id)) +
+            ggplot(aes(x=time_ms, y=value, group=id, color=id)) +
             geom_line()
 g_trace <- df_variables %>%
            filter(variable=='g') %>%
-           ggplot(aes(time_ms, value, color=id)) +
+           ggplot(aes(x=time_ms, y=value, group=id, color=id)) +
            geom_line()
 w_trace <- df_variables %>%
            filter(variable=='w_plast' & monitor=='stdp_in_w') %>%
-           ggplot(aes(time_ms, value, color=id)) +
+           ggplot(aes(x=time_ms, y=value, group=id, color=id)) +
            geom_line()
 
-# TODO #1: output from histogram over time, #2: same, ..., #N...;
-       # then they are summed together, resulting in same-length output
-       # then valvulate average, and mean for fano
 n_sample <- 1000
 hist_bins <- seq(0, tsim*1000, by=3)
 df_fano_factor <- df_raster %>%
