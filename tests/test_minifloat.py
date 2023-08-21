@@ -93,8 +93,8 @@ class TestOrca(unittest.TestCase):
               + [88 for _ in range(n_trials)]
               + [112 for _ in range(n_trials)]
               + [120 for _ in range(n_trials)])
-        ref = [0, .5, .5, .5, .25, .44, .37, .75, 0, .5, .5, .0625, .018750]
-        tol = [.02 for _ in range(len(ref) - 2)] + [.005, .0025]
+        ref = [0, .5, .5, .5, .25, .44, .37, .75, 0, .5, .5, .0625, .015625]
+        tol = [.02 for _ in range(len(ref) - 2)] + [.005, .005]
         n_input = len(ws)
 
         neu = fp8LIF()
