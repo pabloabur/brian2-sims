@@ -16,5 +16,7 @@ jobs:
     - uses: actions/checkout@v3
     - name: Build the Docker image
       run: docker build -t app .
-    - name: run test
-      run: docker run --rm -v $(pwd)/simulations:/tmp/simulations:ro -v $(pwd)/sim_data:/tmp/sim_data app python -m unittest tests/test_minifloat*
+    - name: run a model simulation
+      run: docker run --rm app models
+    - name: test low-precision simulations
+      run: docker run --entrypoint /bin/bash --rm app -c 'micromamba run -n base -r /opt/micromamba python -m unittest tests/test_minifloat*'
