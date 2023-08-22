@@ -1,9 +1,47 @@
 from elephant.statistics import time_histogram, instantaneous_rate, kernels
 from elephant.conversion import BinnedSpikeTrain
+import pandas as pd
 from brian2 import ms
 import quantities as q
 import numpy as np
 import neo
+
+def statemonitors2dataframe(monitors):
+    """ Saves data from brian.StateMonitor in tidy format.
+    
+    Parameters
+    ----------
+    monitors : list of brian.StateMonitor
+
+    Returns
+    -------
+    output_df : pandas.Dataframe
+    """
+    val_col, t_col, mon_col, var_col, id_col = [], [], [], [], []
+    for mon in monitors:
+        variables = mon.needed_variables
+        data_packet = mon.get_states(variables, units=False)
+        for var in variables:
+            temp_val = data_packet[var]
+            temp_t = np.tile(mon.t/ms, temp_val.shape[1])
+            temp_id = np.repeat([mon.record[x] for x in range(mon.n_indices)], temp_val.shape[0])
+            temp_var = np.tile(var, temp_val.size)
+            temp_mon = [mon.name for _ in range(temp_val.size)]
+
+            val_col.extend(temp_val.flatten(order='F'))
+            t_col.extend(temp_t)
+            mon_col.extend(temp_mon)
+            var_col.extend(temp_var)
+            id_col.extend(temp_id)
+
+    output_df = pd.DataFrame(
+        {'value': val_col,
+         'time_ms': t_col,
+         'monitor': mon_col,
+         'variable': var_col,
+         'id': id_col})
+
+    return output_df
 
 def label_spikes(spikes, interval, bin_size):
     """ Process spikes upon presentation of multiple samples

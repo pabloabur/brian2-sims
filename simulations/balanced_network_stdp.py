@@ -1,6 +1,7 @@
 import numpy as np
 import feather
 import pandas as pd
+import json
 import quantities as q
 import sys
 import gc
@@ -13,8 +14,9 @@ from brian2 import mV, second, Hz, ms
 import plotext as plt
 
 from core.utils.misc import minifloat2decimal, decimal2minifloat
-from core.utils.process_responses import neurons_rate
-from core.utils.prepare_models import generate_connection_indices
+from core.utils.process_responses import neurons_rate, statemonitors2dataframe
+from core.utils.prepare_models import generate_connection_indices,\
+    set_hardwarelike_scheme
 
 from core.equations.neurons.fp8LIF import fp8LIF
 from core.equations.synapses.fp8CUBA import fp8CUBA
@@ -34,8 +36,6 @@ DEFAULT_FUNCTIONS.update({'minifloat2decimal': minifloat2decimal})
 
 def balanced_network_stdp(args):
     defaultclock.dt = args.timestep * ms
-    prefs.core.network.default_schedule = ['start', 'groups', 'thresholds',
-                                           'resets', 'synapses', 'end']
     rng = np.random.default_rng()
     run_namespace = {}
 
@@ -58,8 +58,8 @@ def balanced_network_stdp(args):
        raise UserWarning('Precision not supported')
 
     """ ================ Simulation specifications ================ """
-    tmax = 10 * second # TODO 60 * second
-    Ne, Ni = 54000, 13500
+    tmax = 200 * second
+    Ne, Ni = 90000, 22500
     Nt = Ne + Ni
     exc_delay = 1.5
     ext_weights = .25
@@ -100,6 +100,11 @@ def balanced_network_stdp(args):
     stdp_model.modify_model('connection', conn_condition, key='condition')
     synapse_model.modify_model('connection', conn_condition, key='condition')
 
+    # TODO this is just a test, organize it
+    stdp_model.on_pre['stdp_fanout'] = '''
+        delta_w = int(Ca_pre>0 and Ca_post<0)*(eta*Ca_pre) - int(Ca_pre<0 and Ca_post>0)*(eta*Ca_post)
+        w_plast = clip(w_plast + delta_w*int(t<140000*ms), 0*mV, 100*mV)'''
+
     # TODO choose one delta w
     #delta_w = int(Ca_pre>0 and Ca_post<0)*(eta*Ca_pre*(w_plast/mV)**0.4) - int(Ca_pre<0 and Ca_post>0)*(eta*Ca_post*(w_plast/mV))
 
@@ -109,36 +114,34 @@ def balanced_network_stdp(args):
     inh_synapse = create_synapses(inh_neurons,
                                   neurons,
                                   synapse_model)
-    mon_stdp_1 = create_synapses(exc_neurons, mon_neurons, stdp_model)
-    mon_stdp_2 = create_synapses(inh_neurons, mon_neurons, synapse_model)
-    mon_stdp_3 = create_synapses(mon_neurons, neurons, stdp_model)
+    stdp_mon_neuron_1 = create_synapses(exc_neurons, mon_neurons, stdp_model)
+    stdp_mon_neuron_2 = create_synapses(inh_neurons, mon_neurons, synapse_model)
+    stdp_mon_neuron_3 = create_synapses(mon_neurons, neurons, stdp_model)
 
-    # TODO this should be a module/function,  e.g. add_tsv_scheme(), regardless of precision,
-    # where run_reg options are sent and a flag is used when groups are being created
-    stdp_synapse.namespace['eta'] = 2**-9*mV
-    if args.precision == 'fp64':
-       neurons.run_regularly(
-           'Ca = Ca*int(Ca>0) - Ca*int(Ca<0)',
-           name='clear_spike_flag_post',
-           dt=defaultclock.dt,
-           when='after_synapses',
-           order=1)
+    stdp_synapse.namespace['eta'] = 0.001*mV
+
+    # Required to emulate hardware
+    set_hardwarelike_scheme(prefs, [neurons, mon_neurons], defaultclock.dt)
 
     """ ================ Setting up monitors ================ """
-    # TODO something to measure sparsity over time
-    # TODO and it needs to be good, somethingn like abigail's work
-    # TODO naybe yse more connecions here also avg over time
     spikemon_neurons = SpikeMonitor(neurons,
                                     name='spikemon_neurons')
     if args.protocol == 1:
-        stdpmon_incoming = StateMonitor(mon_stdp_1,
+        stdpmon_incoming = StateMonitor(stdp_mon_neuron_1,
                                         variables=['w_plast'],
                                         record=[0, 1],
-                                        dt=1000*ms)
-        stdpmon_outgoing = StateMonitor(mon_stdp_3,
+                                        dt=1000*ms,
+                                        name='stdp_in_w')
+        stdpmon_outgoing = StateMonitor(stdp_mon_neuron_3,
                                         variables=['w_plast'],
                                         record=[0, 1],
-                                        dt=1000*ms)
+                                        dt=1000*ms,
+                                        name='stdp_out_w')
+        mon_neurons_vars = StateMonitor(mon_neurons,
+                                        variables=['Ca', 'g'],
+                                        record=[0, 1],
+                                        dt=100*ms,
+                                        name='neu_state_variables')
     elif args.protocol == 2:
         spikemon_neurons_test = SpikeMonitor(mon_neurons)
         active_monitor = EventMonitor(neurons, 'active_Ca')
@@ -149,6 +152,13 @@ def balanced_network_stdp(args):
     if args.backend == 'cpp_standalone' or args.backend == 'cuda_standalone':
         device.build(args.code_path)
 
+    metadata = {'dt': str(defaultclock.dt),
+                'duration': str(tmax),
+                'N_exc': Ne,
+                'N_inh': Ni}
+    with open(f'{args.save_path}/metadata.json', 'w') as f:
+        json.dump(metadata, f)
+
     if not args.quiet:
         # TODO more stuff in 1, and 2 was not even worked out
         # TODO this is not quiet
@@ -157,6 +167,11 @@ def balanced_network_stdp(args):
                 {'time_ms': np.array(spikemon_neurons.t/defaultclock.dt),
                  'id': np.array(spikemon_neurons.i)})
             output_spikes.to_csv(f'{args.save_path}/output_spikes.csv', index=False)
+
+            output_vars = statemonitors2dataframe([mon_neurons_vars,
+                                                   stdpmon_incoming,
+                                                   stdpmon_outgoing])
+            output_vars.to_csv(f'{args.save_path}/output_vars.csv', index=False)
 
         if args.protocol == 2:
             num_fetches = {'pre': spikemon_neurons.num_spikes,
@@ -175,8 +190,8 @@ def balanced_network_stdp(args):
             print(np.shape(spikemon_neurons.t))
             print(np.shape(active_monitor.t))
 
-            max_synapse_id = np.where(stdp_synapse.w_plast/mV==np.max(stdp_synapse.w_plast/mV))[0]
-            target_neuron_id = stdp_synapse.j[max_synapse_id[0]]
+        max_synapse_id = np.where(stdp_synapse.w_plast/mV==np.max(stdp_synapse.w_plast/mV))[0]
+        target_neuron_id = stdp_synapse.j[max_synapse_id[0]]
 
         # target neuron has at least one saturated weight
         plt.clear_figure()

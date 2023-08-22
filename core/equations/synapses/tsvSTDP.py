@@ -14,7 +14,7 @@ class tsvSTDP(tsvCUBA):
             **self.on_pre,
             **{'stdp_fanout': '''
                 delta_w = int(Ca_pre>0 and Ca_post<0)*(eta*Ca_pre) - int(Ca_pre<0 and Ca_post>0)*(eta*Ca_post)
-                w_plast = clip(w_plast + delta_w, 0*mV, 100*mV)'''}})
+                w_plast = clip(w_plast + delta_w, 0*mV, 10*mV)'''}})
         self.on_event = ParamDict({'pre': 'spike', 'stdp_fanout': 'active_Ca'})
 
         self.parameters = ParamDict({**self.parameters,

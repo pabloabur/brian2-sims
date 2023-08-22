@@ -35,3 +35,26 @@ def generate_connection_indices(pre_size, post_size, prob_conn, seed=None,
         targets = [x for i, x in enumerate(targets) if not del_items[i]]
 
     return sources, targets
+
+def set_hardwarelike_scheme(prefs, neurons, run_reg_dt):
+    """ Required function to set a simulation scheme similar to hardware
+        proposed (see Wang et al., 2018).
+        
+    Parameters
+    ----------
+    prefs : brian2.prefs
+        Class containing information of preferred simulation settings
+    neurons : list of brian2.NeuronGroup
+        Neurons to which run_regularly operations will be added to.
+    run_reg_dt : brian2.ms
+        Indicates how often neurons' run_regularly is performed.
+    """
+    prefs.core.network.default_schedule = ['start', 'groups', 'thresholds',
+                                           'resets', 'synapses', 'end']
+    for neu in neurons:
+        neu.run_regularly(
+            'Ca = Ca*int(Ca>0) - Ca*int(Ca<0)',
+            name=f'clear_{neu.name}_spike_flag',
+            dt=run_reg_dt,
+            when='after_synapses',
+            order=1)
