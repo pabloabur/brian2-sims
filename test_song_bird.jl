@@ -59,6 +59,42 @@ function preprocess_spike_data(neuron_spike_ids, times)
     trains_array, neuron_ids
 end
 
+function load_song_bird()
+
+    spikes = []
+    file_read_list = readdlm("../data2/songbird_spikes.txt", '\t', Float64, '\n')
+    nodes = [n for (n, t) in eachrow(file_read_list)]
+    for _ in 1:maximum(unique(nodes))+1
+        push!(spikes,[])
+    end
+    @inbounds for (t, n) in eachrow(file_read_list)
+        if length(t)!=0
+            push!(spikes,[])
+            #@show(spikes[Int32(n)])
+
+        end
+    end
+    for (n, t) in eachrow(file_read_list)
+        push!(spikes[Int32(n)],t)
+    end
+    nnn=Vector{UInt32}([])
+    ttt=Vector{Float32}([])
+    for (i, t) in enumerate(spikes)
+        for tt in t
+            if length(t)!=0
+                push!(nnn,i);
+                push!(ttt,Float32(tt))
+            end
+        end
+    end
+    numb_neurons=Int(maximum(nodes))+1
+
+    maxt = (maximum(ttt))    
+    (nnn::Vector{UInt32},ttt::Vector{Float32},spikes,numb_neurons,maxt)
+end
+(nodes,times,spikes,numb_neurons,maxt)= load_song_bird()
+#resolution = 60 # 65
+
 target_path = ARGS[1] * "/"
 if !isfile(target_path * "output_spikes.jld")
     df = CSV.read(target_path * "output_spikes.csv", DataFrame)
