@@ -14,7 +14,8 @@ from brian2 import mV, second, Hz, ms
 import plotext as plt
 
 from core.utils.misc import minifloat2decimal, decimal2minifloat
-from core.utils.process_responses import neurons_rate, statemonitors2dataframe
+from core.utils.process_responses import neurons_rate, statemonitors2dataframe,\
+    objects2dataframe
 from core.utils.prepare_models import generate_connection_indices,\
     set_hardwarelike_scheme
 
@@ -100,13 +101,13 @@ def balanced_network_stdp(args):
     stdp_model.modify_model('connection', conn_condition, key='condition')
     synapse_model.modify_model('connection', conn_condition, key='condition')
 
-    # TODO this is just a test, organize it
-    stdp_model.on_pre['stdp_fanout'] = '''
-        delta_w = int(Ca_pre>0 and Ca_post<0)*(eta*Ca_pre) - int(Ca_pre<0 and Ca_post>0)*(eta*Ca_post)
-        w_plast = clip(w_plast + delta_w*int(t<140000*ms), 0*mV, 100*mV)'''
+    stdp_model.modify_model('namespace', 0.1*mV, key='eta')
 
-    # TODO choose one delta w
-    #delta_w = int(Ca_pre>0 and Ca_post<0)*(eta*Ca_pre*(w_plast/mV)**0.4) - int(Ca_pre<0 and Ca_post>0)*(eta*Ca_post*(w_plast/mV))
+    w_max = 20
+    turnoff_t = 140000
+    stdp_model.on_pre['stdp_fanout'] = f'''
+        delta_w = int(Ca_pre>0 and Ca_post<0)*(eta*Ca_pre) - int(Ca_pre<0 and Ca_post>0)*(eta*Ca_post)
+        w_plast = clip(w_plast + delta_w*int(t<{turnoff_t}*ms), 0*mV, {w_max}*mV)'''
 
     stdp_synapse = create_synapses(exc_neurons,
                                    neurons,
@@ -118,33 +119,27 @@ def balanced_network_stdp(args):
     stdp_mon_neuron_2 = create_synapses(inh_neurons, mon_neurons, synapse_model)
     stdp_mon_neuron_3 = create_synapses(mon_neurons, neurons, stdp_model)
 
-    stdp_synapse.namespace['eta'] = 0.001*mV
-
     # Required to emulate hardware
     set_hardwarelike_scheme(prefs, [neurons, mon_neurons], defaultclock.dt)
 
     """ ================ Setting up monitors ================ """
     spikemon_neurons = SpikeMonitor(neurons,
                                     name='spikemon_neurons')
-    if args.protocol == 1:
-        stdpmon_incoming = StateMonitor(stdp_mon_neuron_1,
-                                        variables=['w_plast'],
-                                        record=[0, 1],
-                                        dt=1000*ms,
-                                        name='stdp_in_w')
-        stdpmon_outgoing = StateMonitor(stdp_mon_neuron_3,
-                                        variables=['w_plast'],
-                                        record=[0, 1],
-                                        dt=1000*ms,
-                                        name='stdp_out_w')
-        mon_neurons_vars = StateMonitor(mon_neurons,
-                                        variables=['Ca', 'g'],
-                                        record=[0, 1],
-                                        dt=100*ms,
-                                        name='neu_state_variables')
-    elif args.protocol == 2:
-        spikemon_neurons_test = SpikeMonitor(mon_neurons)
-        active_monitor = EventMonitor(neurons, 'active_Ca')
+    stdpmon_incoming = StateMonitor(stdp_mon_neuron_1,
+                                    variables=['w_plast'],
+                                    record=[0, 1],
+                                    dt=1000*ms,
+                                    name='stdp_in_w')
+    stdpmon_outgoing = StateMonitor(stdp_mon_neuron_3,
+                                    variables=['w_plast'],
+                                    record=[0, 1],
+                                    dt=1000*ms,
+                                    name='stdp_out_w')
+    mon_neurons_vars = StateMonitor(mon_neurons,
+                                    variables=['Ca', 'g'],
+                                    record=[0, 1],
+                                    dt=100*ms,
+                                    name='neu_state_variables')
 
     run(tmax, report='stdout', namespace=run_namespace)
     gc.collect()
@@ -155,41 +150,27 @@ def balanced_network_stdp(args):
     metadata = {'dt': str(defaultclock.dt),
                 'duration': str(tmax),
                 'N_exc': Ne,
-                'N_inh': Ni}
+                'N_inh': Ni,
+                'w_max': str(w_max*mV),
+                'turnoff_t': str(turnoff_t*ms)
+                }
     with open(f'{args.save_path}/metadata.json', 'w') as f:
         json.dump(metadata, f)
 
+    output_spikes = pd.DataFrame(
+        {'time_ms': np.array(spikemon_neurons.t/defaultclock.dt),
+         'id': np.array(spikemon_neurons.i)})
+    output_spikes.to_csv(f'{args.save_path}/output_spikes.csv', index=False)
+
+    output_vars = statemonitors2dataframe([mon_neurons_vars,
+                                           stdpmon_incoming,
+                                           stdpmon_outgoing])
+    output_vars.to_csv(f'{args.save_path}/output_vars.csv', index=False)
+
+    obj_vars = objects2dataframe([stdp_synapse], [('i', 'j', 'w_plast')])
+    obj_vars.to_csv(f'{args.save_path}/obj_vars.csv', index=False)
+
     if not args.quiet:
-        # TODO more stuff in 1, and 2 was not even worked out
-        # TODO this is not quiet
-        if args.protocol == 1:
-            output_spikes = pd.DataFrame(
-                {'time_ms': np.array(spikemon_neurons.t/defaultclock.dt),
-                 'id': np.array(spikemon_neurons.i)})
-            output_spikes.to_csv(f'{args.save_path}/output_spikes.csv', index=False)
-
-            output_vars = statemonitors2dataframe([mon_neurons_vars,
-                                                   stdpmon_incoming,
-                                                   stdpmon_outgoing])
-            output_vars.to_csv(f'{args.save_path}/output_vars.csv', index=False)
-
-        if args.protocol == 2:
-            num_fetches = {'pre': spikemon_neurons.num_spikes,
-                           'fanout': active_monitor.num_events}
-            print(f'Potential memory fetches for each strategy:\nConventional:'
-                  f' {2*num_fetches["pre"]/1e6}M\nFanout: '
-                  f'{num_fetches["fanout"]/1e6}M')
-            print('Number of plastic connections')
-            print(np.shape(stdp_synapse.w_plast))
-            # TODO remove, they're the same
-            print('spkmon numspike')
-            print(spikemon_neurons.num_spikes)
-            print('spkmon numevents')
-            print(active_monitor.num_events)
-            print('shape of spk t of each above')
-            print(np.shape(spikemon_neurons.t))
-            print(np.shape(active_monitor.t))
-
         max_synapse_id = np.where(stdp_synapse.w_plast/mV==np.max(stdp_synapse.w_plast/mV))[0]
         target_neuron_id = stdp_synapse.j[max_synapse_id[0]]
 
@@ -224,11 +205,3 @@ def balanced_network_stdp(args):
         plt.title('Final distribution of weights')
         plt.build()
         plt.save_fig(f'{args.save_path}/fig2.txt', keep_colors=True)
-
-        #neu_r = neurons_rate(spikemon_neurons_test, tmax/ms)
-        #plt.clear_figure()
-        #plt.plot(neu_r.times/q.ms, neu_r[:, 0].magnitude.flatten())
-        #plt.plot(neu_r.times/q.ms, neu_r[:, 1].magnitude.flatten())
-        #plt.title('Rate of some neurons')
-        #plt.build()
-        #plt.save_fig(f'{args.save_path}/fig3.txt', keep_colors=True)

@@ -11,4 +11,4 @@
 
 module load singularity
 singularity run --nv /scratch/jr22/pu6813/app_latest.sif --save_path /scratch/jr22/pu6813/bal_stdp_cudadgx/ --code_path /scratch/jr22/pu6813/cudacodedgx/ --backend cuda_standalone balance_stdp > $PBS_JOBID.log
-echo "Not so long simulation with high weight cap and less inhibition. Weights eventually become static" >> /scratch/jr22/pu6813/bal_stdp_cudadgx4/description.txt
+echo "Not so long simulation with high weight cap and less inhibition. Weights eventually become static" >> /scratch/jr22/pu6813/bal_stdp_cudadgx/description.txt

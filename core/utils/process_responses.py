@@ -6,6 +6,27 @@ import quantities as q
 import numpy as np
 import neo
 
+def objects2dataframe(objects, object_variables):
+    """ Saves brian objects in tidy format.
+    
+    Parameters
+    ----------
+    objects : list of brian objects
+    object_variables : list of tuples
+        Every tuple `i` corresponds to the variables of object `i` that will
+        be saved
+
+    Returns
+    -------
+    output_df : pandas.Dataframe
+    """
+    df_dict = {}
+    for obj, vars in zip(objects, object_variables):
+        for var in vars:
+            df_dict[var] = np.array(getattr(obj, var))
+    output_df = pd.DataFrame(df_dict)
+    return output_df
+
 def statemonitors2dataframe(monitors):
     """ Saves data from brian.StateMonitor in tidy format.
     
