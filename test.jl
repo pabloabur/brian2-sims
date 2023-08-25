@@ -62,10 +62,6 @@ end
 target_path = ARGS[1] * "/"
 if !isfile(target_path * "output_spikes.jld")
     df = CSV.read(target_path * "output_spikes.csv", DataFrame)
-    # TODO here
-    #df = filter(row -> row.time_ms > 194999, df)
-    #df = filter(row -> row.time_ms > 138000 && row.time_ms < 142000, df)
-    #df = filter(row -> row.time_ms > 0 && row.time_ms < 4000, df)
 
     neuron_spike_ids = df.id
     neuron_spike_ids = Vector{Int32}(neuron_spike_ids)
@@ -86,10 +82,20 @@ else
     times = load(target_path * "output_spikes.jld", "times")
 end
 
+# Useful scenarios
+# End of simulation, non changing weights: 194999 onwards
+# Transition between plasticity active and turned off: between 138000 and 142000
+# Beginning of simulation: between 0 and 4000
+trains_array = map(filter(x -> x>138000 && x<142000), trains_array)
+empty_elements = isempty.(trains_array)
+trains_array = trains_array[.!empty_elements]
+neuron_ids = neuron_ids[.!empty_elements]
+
 println("Calculating time-surface")
 exp_kernel = Vector{Float32}([exp(-x/30) for x in range(start=0, stop=999)])
 step_kernel = Vector{Float32}([0, 1, 0])
-sim_times = Vector{Int32}(range(start=minimum(times), stop=maximum(times)))
+sim_times = Vector{Int32}(range(start=minimum(minimum.(trains_array)),
+                                stop=maximum(maximum.(trains_array))))
 time_surface = compute_liquid_states(trains_array, sim_times, exp_kernel, 1)
 
 println("Calculating UMAP")

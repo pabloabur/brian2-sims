@@ -20,7 +20,7 @@ from brian2 import mV, second, Hz, ms
 import plotext as plt
 
 from core.utils.misc import minifloat2decimal, decimal2minifloat
-from core.utils.process_responses import neurons_rate
+from core.utils.process_responses import neurons_rate, statemonitors2dataframe
 from core.utils.prepare_models import generate_connection_indices,\
     set_hardwarelike_scheme
 
@@ -331,18 +331,21 @@ def stdp(args):
         device.build(args.code_path)
 
     """ =================== Saving data =================== """
-    output_spikes = pd.dataframe(
+    output_spikes = pd.DataFrame(
         {'time_ms': np.array(spikemon_post_neurons.t/defaultclock.dt),
          'id': np.array(spikemon_post_neurons.i)})
-    output_spikes.to_csv(f'{args.save_path}/post_spikes.csv', index=false)
+    output_spikes.to_csv(f'{args.save_path}/post_spikes.csv', index=False)
+    output_spikes = pd.DataFrame(
+        {'time_ms': np.array(active_monitor.t/defaultclock.dt),
+         'id': np.array(active_monitor.i)})
+    output_spikes.to_csv(f'{args.save_path}/events_spikes.csv', index=False)
     if args.protocol != 4:
-        output_spikes = pd.dataframe(
+        output_spikes = pd.DataFrame(
                 {'time_ms': np.array(spikemon_pre_neurons.t/defaultclock.dt),
                  'id': np.array(spikemon_pre_neurons.i)})
-        output_spikes.to_csv(f'{args.save_path}/post_spikes.csv', index=false)
+        output_spikes.to_csv(f'{args.save_path}/post_spikes.csv', index=False)
 
-    output_vars = statemonitors2dataframe([statemon_post_synapse,
-                                           active_monitor])
+    output_vars = statemonitors2dataframe([statemon_post_synapse])
     output_vars.to_csv(f'{args.save_path}/synapse_vars.csv', index=False)
 
     if args.protocol < 3:
