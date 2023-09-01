@@ -45,3 +45,25 @@ print('memory storage')
 print('=============')
 for item, value in sorted_stor:
     print(item, value)
+
+>>> Ne=90000
+>>> Ni=22500
+>>> Ne+Ni
+112500
+>>> 3*32*112500/8/1e6
+1.35
+>>> Nt=Ne+Ni
+>>> rho=.1
+>>> Nt*rho*Nt*32 + Nt*rho*Nt*np.log2(Nt) + Nt*np.log2(Nt*rho*Nt)
+Traceback (most recent call last):
+  File "<stdin>", line 1, in <module>
+NameError: name 'np' is not defined
+>>> import numpy as np
+>>> np.log2(
+KeyboardInterrupt
+>>>
+KeyboardInterrupt
+>>> Nt*rho*Nt*32 + Nt*rho*Nt*np.log2(Nt) + Nt*np.log2(Nt*rho*Nt)
+61740039240.73091
+>>> (Nt*rho*Nt*32 + Nt*rho*Nt*np.log2(Nt) + Nt*np.log2(Nt*rho*Nt))/8/1e9
+7.7175049050913636
