@@ -27,6 +27,13 @@ N_exc <- metadata$N_exc
 
 df_raster <- read.csv(file.path(data_path, 'output_spikes.csv'))
 df_variables <- read.csv(file.path(data_path, 'output_vars.csv'))
+# TODO cover scenarios, e.g. NprerhoNpost, rho_a(t). Probaly merge all protocols, if memory permits
+#df_events <- read.csv(file.path(data_path, 'events_spike.csv'))
+#fig<-df_events  %>% ggplot(aes(x=time_ms, y=num_events)) + geom_line()
+#ggplotly(fig)
+
+# TODO
+#mean((df_raster %>% filter(time_ms>(tsim - 50)*1000 & time_ms<tsim*1000) %>% group_by(id) %>% summarise(mean_isi=mean(diff(time_ms)), sd_isi=sd(diff(time_ms))) %>% mutate(cv=sd_isi/mean_isi))$cv)
 
 print("Plotting rates")
 df_rates_init <- df_raster %>%
