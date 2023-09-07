@@ -150,6 +150,10 @@ def stdp(args):
     else:
        raise UserWarning('Precision not supported')
 
+    ref_neuron_model = LIF()
+    ref_synapse_model = CUBA()
+    ref_stdp_model = STDP()
+
     """ ================ Protocol specifications ================ """
     if args.protocol == 1:
         N_pre, N_post = 2, 2
@@ -158,25 +162,48 @@ def stdp(args):
         static_weight = 120
         conn_condition = 'i==j'
 
+        ref_neuron_model.modify_model('model',
+                                      'gtot = gtot0 + gtot1',
+                                      old_expr='gtot = gtot0')
+        ref_neuron_model.model += 'gtot1 : volt\n'
+
         pre_spikegenerator, post_spikegenerator, tmax = stimuli_protocol1()
         pre_neurons = create_neurons(2, neuron_model)
+        ref_pre_neurons = create_neurons(2, ref_neuron_model)
         post_neurons = create_neurons(2, neuron_model)
+        ref_post_neurons = create_neurons(2, ref_neuron_model)
 
         synapse_model.modify_model('parameters',
                                    aux_w_sample(static_weight),
                                    key='weight')
+        ref_synapse_model.modify_model('parameters',
+                                       static_weight*mV,
+                                       key='weight')
         pre_synapse = create_synapses(pre_spikegenerator,
                                       pre_neurons,
                                       synapse_model,
                                       name='static_pre_synapse')
+        ref_pre_synapse = create_synapses(pre_spikegenerator,
+                                          ref_pre_neurons,
+                                          ref_synapse_model,
+                                          name='ref_static_pre_synapse')
         post_synapse = create_synapses(post_spikegenerator,
                                        post_neurons,
                                        synapse_model,
                                        name='static_post_synapse')
+        ref_post_synapse = create_synapses(post_spikegenerator,
+                                           ref_post_neurons,
+                                           ref_synapse_model,
+                                           name='ref_static_post_synapse')
 
         stdp_model.modify_model('connection',
                                 conn_condition,
                                 key='condition')
+        ref_stdp_model.modify_model('connection',
+                                    conn_condition,
+                                    key='condition')
+
+        ref_stdp_model.modify_model('model', 'gtot1_post', old_expr='gtot0_post')
 
     elif args.protocol == 2:
         tapre, tapost, tmax, N, trial_duration = stimuli_protocol2()
@@ -229,85 +256,31 @@ def stdp(args):
                                 conn_condition,
                                 key='condition')
 
-    elif args.protocol == 4:
-        tmax = 60000 * ms
-        Ne, Ni = 900, 225
-        Nt = Ne + Ni
-        exc_delay = 1.5
-        ext_weights = .25
-        exc_weights = 4.561
-        inh_weights = 5 * exc_weights
-        p_conn = .1
-
-
-        neuron_model.modify_model('parameters',
-                                  'clip(5.7 + randn()*7.2, 0, inf)*mV',
-                                  key='Vm')
-
-        neurons = create_neurons(Ne+Ni,
-                                 neuron_model)
-        exc_neurons = neurons[:Ne]
-        inh_neurons = neurons[Ne:]
-        # N.B. relative to pre and post populations of stdp_synapse
-        pre_neurons, post_neurons = exc_neurons, neurons
-        N_pre, N_post = Ne, Nt
-
-        poisson_spikes = PoissonInput(neurons, 'g', 9000, rate=2.32*Hz,
-                                      weight=f'{ext_weights}*mV')
-
-        tmp_eq = f'int(clip({exc_delay} + randn()*{exc_delay/2}, 1, inf))*ms'
-        stdp_model.modify_model('parameters', tmp_eq, key='delay')
-        synapse_model.modify_model('parameters', tmp_eq, key='delay')
-
-        sources_e, targets_e = generate_connection_indices(Ne, Nt, p_conn,
-                                                           allow_autapse=False)
-        stdp_model.modify_model('connection', sources_e, key='i')
-        stdp_model.modify_model('connection', targets_e, key='j')
-        sources_i, targets_i = generate_connection_indices(Ni, Nt, p_conn,
-                                                           allow_autapse=False)
-        synapse_model.modify_model('connection', sources_i, key='i')
-        synapse_model.modify_model('connection', targets_i, key='j')
-
-        tmp_eq = f'clip({inh_weights} + randn()*{inh_weights/10}, 0, inf)*mV'
-        synapse_model.modify_model('parameters', tmp_eq, key='weight')
-        synapse_model.modify_model('namespace', -1, key='w_factor')
-
-        n_conns = len(sources_e)
-        sampled_weights = np.clip(rng.normal(exc_weights,
-                                             exc_weights/10,
-                                             n_conns),
-                                  0, np.inf)
-
-        # Inhibitory group, called `pre_synapse` for compatibility with other
-        # protocols
-        pre_synapse = create_synapses(inh_neurons,
-                                      neurons,
-                                      synapse_model)
-
-        run_namespace.update({'ext_weights': ext_weights})
-
     """ ================ General specifications ================ """
     stdp_model.modify_model('parameters',
                             aux_w_sample(sampled_weights),
                             key='w_plast')
+    ref_stdp_model.modify_model('parameters',
+                                sampled_weights*mV,
+                                key='w_plast')
     stdp_model.modify_model('namespace', 0.1*mV, key='eta')
+    ref_stdp_model.modify_model('namespace', 0.1*mV, key='eta')
 
     stdp_synapse = create_synapses(pre_neurons,
                                    post_neurons,
                                    stdp_model,
                                    name='stdp_synapse')
+    ref_stdp_synapse = create_synapses(ref_pre_neurons,
+                                       ref_post_neurons,
+                                       ref_stdp_model,
+                                       name='ref_stdp_synapse')
 
-    if args.precision == 'fp64':
-        if args.protocol == 4:
-            neurons_list = [post_neurons]
-        else:
-            neurons_list = [pre_neurons, post_neurons]
-        set_hardwarelike_scheme(prefs, neurons_list, defaultclock.dt)
+    neurons_list = [pre_neurons, post_neurons]
+    set_hardwarelike_scheme(prefs, neurons_list, defaultclock.dt)
 
     """ ================ Setting up monitors ================ """
-    if args.protocol != 4:
-        spikemon_pre_neurons = SpikeMonitor(pre_neurons,
-                                            name='spikemon_pre_neurons')
+    spikemon_pre_neurons = SpikeMonitor(pre_neurons,
+                                        name='spikemon_pre_neurons')
     spikemon_post_neurons = SpikeMonitor(post_neurons,
                                          name='spikemon_post_neurons')
     if args.protocol < 3:
@@ -315,14 +288,26 @@ def stdp(args):
                                             variables=['Vm', 'g', 'Ca'],
                                             record=range(N_pre),
                                             name='statemon_pre_neurons')
+        ref_statemon_pre_neurons = StateMonitor(ref_pre_neurons,
+                                            variables=['Vm'],
+                                            record=range(N_pre),
+                                            name='ref_statemon_pre_neurons')
     statemon_post_neurons = StateMonitor(post_neurons,
                                          variables=['Vm', 'g', 'Ca'],
                                          record=range(N_post),
                                          name='statemon_post_neurons')
+    ref_statemon_post_neurons = StateMonitor(ref_post_neurons,
+                                         variables=['Vm'],
+                                         record=range(N_post),
+                                         name='ref_statemon_post_neurons')
     statemon_post_synapse = StateMonitor(stdp_synapse,
                                         variables=['w_plast'],
                                         record=range(n_conns),
                                         name='statemon_post_synapse')
+    ref_statemon_post_synapse = StateMonitor(ref_stdp_synapse,
+                                        variables=['w_plast'],
+                                        record=range(n_conns),
+                                        name='ref_statemon_post_synapse')
     active_monitor = EventMonitor(pre_neurons, 'active_Ca', 'Ca')
 
     run(tmax, report='stdout', namespace=run_namespace)
@@ -339,11 +324,10 @@ def stdp(args):
         {'time_ms': np.array(active_monitor.t/defaultclock.dt),
          'id': np.array(active_monitor.i)})
     output_spikes.to_csv(f'{args.save_path}/events_spikes.csv', index=False)
-    if args.protocol != 4:
-        output_spikes = pd.DataFrame(
-                {'time_ms': np.array(spikemon_pre_neurons.t/defaultclock.dt),
-                 'id': np.array(spikemon_pre_neurons.i)})
-        output_spikes.to_csv(f'{args.save_path}/post_spikes.csv', index=False)
+    output_spikes = pd.DataFrame(
+            {'time_ms': np.array(spikemon_pre_neurons.t/defaultclock.dt),
+             'id': np.array(spikemon_pre_neurons.i)})
+    output_spikes.to_csv(f'{args.save_path}/post_spikes.csv', index=False)
 
     output_vars = statemonitors2dataframe([statemon_post_synapse])
     output_vars.to_csv(f'{args.save_path}/synapse_vars.csv', index=False)
@@ -362,14 +346,16 @@ def stdp(args):
             plt.scatter(spikemon_post_neurons.t[delta_ti:delta_tf]/ms,
                         spikemon_post_neurons.i[delta_ti:delta_tf])
             plt.build()
-            plt.save_fig(f'{args.save_path}/fig1.txt')
+            plt.title('Spikes')
+            plt.save_fig(f'{args.save_path}/fig1.txt', keep_colors=True)
 
             plt.clear_figure()
             plt.plot(statemon_post_synapse.t[delta_ti:delta_tf]/ms,
                      aux_plot(
                          statemon_post_synapse.w_plast[0][delta_ti:delta_tf]))
+            plt.title('Weight evolution')
             plt.build()
-            plt.save_fig(f'{args.save_path}/fig2.txt')
+            plt.save_fig(f'{args.save_path}/fig2.txt', keep_colors=True)
 
             plt.clear_figure()
             plt.plot(statemon_post_neurons.t[delta_ti:delta_tf]/ms,
@@ -378,14 +364,33 @@ def stdp(args):
             plt.plot(statemon_pre_neurons.t[delta_ti:delta_tf]/ms,
                      aux_plot_Ca(
                          statemon_pre_neurons.Ca[0][delta_ti:delta_tf]))
+            plt.title('Time window evolution')
             plt.build()
-            plt.save_fig(f'{args.save_path}/fig3.txt')
+            plt.save_fig(f'{args.save_path}/fig3.txt', keep_colors=True)
 
             plt.clear_figure()
             plt.plot(statemon_pre_neurons.t[delta_ti:delta_tf]/ms,
                      aux_plot(statemon_pre_neurons.Vm[0]))
+            plt.title('Vm evolution')
             plt.build()
-            plt.save_fig(f'{args.save_path}/fig4.txt')
+            plt.save_fig(f'{args.save_path}/fig4.txt', keep_colors=True)
+
+            # TODO axis between 0 and 1? then it is not that bad
+            plt.clear_figure()
+            plt.plot(ref_statemon_post_neurons.t/ms, ref_statemon_post_neurons.Vm[0]/mV, label='ref')
+            plt.plot(statemon_post_neurons.t/ms, statemon_post_neurons.Vm[0]/mV, label='base')
+            plt.plot(((statemon_post_neurons.Vm/mV - ref_statemon_post_neurons.Vm/mV)**2).mean(axis=0), label='MSE')
+            plt.title('difference between Vms')
+            plt.build()
+            plt.save_fig(f'{args.save_path}/fig5.txt', keep_colors=True)
+
+            plt.clear_figure()
+            plt.plot(ref_statemon_post_synapse.t/ms, ref_statemon_post_synapse.w_plast[0]/mV, label='ref')
+            plt.plot(statemon_post_synapse.t/ms, statemon_post_synapse.w_plast[0]/mV, label='base')
+            plt.plot(((statemon_post_synapse.w_plast/mV - ref_statemon_post_synapse.w_plast/mV)**2).mean(axis=0), label='MSE')
+            plt.title('MSE')
+            plt.build()
+            plt.save_fig(f'{args.save_path}/fig6.txt', keep_colors=True)
 
         elif args.protocol == 2:
             pairs_timing = (spikemon_post_neurons.t[:trial_duration]
@@ -437,37 +442,3 @@ def stdp(args):
             plt.plot(neu_r.times/q.ms, neu_r.magnitude.flatten())
             plt.build()
             plt.save_fig(f'{args.save_path}/fig4.txt')
-
-        elif args.protocol == 4:
-            num_fetches = {'pre': spikemon_post_neurons.num_spikes,
-                           'fanout': active_monitor.num_events}
-            print(f'Potential memory fetches for each strategy:\nConventional:'
-                  f' {2*num_fetches["pre"]/1e6}M\nFanout: '
-                  f'{num_fetches["fanout"]/1e6}M')
-
-            max_weight_idx = np.where(
-                stdp_synapse.w_plast == max(stdp_synapse.w_plast))[0]
-            target_id = stdp_synapse.j[max_weight_idx[0]]
-            plt.clear_figure()
-            plt.hist(np.array(stdp_synapse.w_plast/mV)[stdp_synapse.j==target_id])
-            plt.title('Weights targetting a neuron')
-            plt.build()
-            plt.save_fig(f'{args.save_path}/fig1.txt')
-
-            source_ids = np.array(stdp_synapse.i)[stdp_synapse.j==target_id]
-            n_incoming = np.shape(
-                statemon_post_synapse.w_plast[stdp_synapse.j==target_id, :])[0]
-            plt.clear_figure()
-            for x in range(n_incoming):
-                plt.plot(np.array(
-                    statemon_post_synapse.w_plast/mV)[stdp_synapse.j==target_id,
-                                                      :][x, :])
-            plt.title(f'Neurons {source_ids} targeting {target_id} over time')
-            plt.build()
-            plt.save_fig(f'{args.save_path}/fig2.txt')
-
-            plt.clear_figure()
-            plt.hist(stdp_synapse.w_plast/mV)
-            plt.title('Final distribution of weights')
-            plt.build()
-            plt.save_fig(f'{args.save_path}/fig3.txt')
