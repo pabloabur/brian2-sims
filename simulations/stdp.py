@@ -266,6 +266,13 @@ def stdp(args):
     stdp_model.modify_model('namespace', 0.1*mV, key='eta')
     ref_stdp_model.modify_model('namespace', 0.1*mV, key='eta')
 
+    ref_stdp_model.modify_model('on_pre',
+                                'int(lastspike_post!=lastspike_pre)*eta*j_trace',
+                                old_expr='eta*j_trace')
+    ref_stdp_model.modify_model('on_post',
+                                'int(lastspike_post!=lastspike_pre)*eta*i_trace',
+                                old_expr='eta*i_trace')
+
     stdp_synapse = create_synapses(pre_neurons,
                                    post_neurons,
                                    stdp_model,
@@ -350,14 +357,6 @@ def stdp(args):
             plt.save_fig(f'{args.save_path}/fig1.txt', keep_colors=True)
 
             plt.clear_figure()
-            plt.plot(statemon_post_synapse.t[delta_ti:delta_tf]/ms,
-                     aux_plot(
-                         statemon_post_synapse.w_plast[0][delta_ti:delta_tf]))
-            plt.title('Weight evolution')
-            plt.build()
-            plt.save_fig(f'{args.save_path}/fig2.txt', keep_colors=True)
-
-            plt.clear_figure()
             plt.plot(statemon_post_neurons.t[delta_ti:delta_tf]/ms,
                      aux_plot_Ca(
                          statemon_post_neurons.Ca[0][delta_ti:delta_tf]))
@@ -369,28 +368,28 @@ def stdp(args):
             plt.save_fig(f'{args.save_path}/fig3.txt', keep_colors=True)
 
             plt.clear_figure()
-            plt.plot(statemon_pre_neurons.t[delta_ti:delta_tf]/ms,
-                     aux_plot(statemon_pre_neurons.Vm[0]))
-            plt.title('Vm evolution')
+            plt.title('difference between Vms')
+            plt.plot(ref_statemon_post_neurons.t/ms, ref_statemon_post_neurons.Vm[0]/mV, label='ref')
+            plt.plot(statemon_post_neurons.t/ms, statemon_post_neurons.Vm[0]/mV, label='base')
             plt.build()
             plt.save_fig(f'{args.save_path}/fig4.txt', keep_colors=True)
 
-            # TODO axis between 0 and 1? then it is not that bad
             plt.clear_figure()
-            plt.plot(ref_statemon_post_neurons.t/ms, ref_statemon_post_neurons.Vm[0]/mV, label='ref')
-            plt.plot(statemon_post_neurons.t/ms, statemon_post_neurons.Vm[0]/mV, label='base')
-            plt.plot(((statemon_post_neurons.Vm/mV - ref_statemon_post_neurons.Vm/mV)**2).mean(axis=0), label='MSE')
-            plt.title('difference between Vms')
+            plt.title('difference between weights')
+            plt.plot(ref_statemon_post_synapse.t/ms, ref_statemon_post_synapse.w_plast[0]/mV, label='ref')
+            plt.plot(statemon_post_synapse.t/ms, statemon_post_synapse.w_plast[0]/mV, label='base')
             plt.build()
             plt.save_fig(f'{args.save_path}/fig5.txt', keep_colors=True)
 
             plt.clear_figure()
-            plt.plot(ref_statemon_post_synapse.t/ms, ref_statemon_post_synapse.w_plast[0]/mV, label='ref')
-            plt.plot(statemon_post_synapse.t/ms, statemon_post_synapse.w_plast[0]/mV, label='base')
+            plt.subplots(2, 1)
+            plt.subplot(1, 1).title('Weight mean square error')
             plt.plot(((statemon_post_synapse.w_plast/mV - ref_statemon_post_synapse.w_plast/mV)**2).mean(axis=0), label='MSE')
-            plt.title('MSE')
+            plt.subplot(2, 1).title('Vm mean square error')
+            plt.plot(((statemon_post_neurons.Vm/mV - ref_statemon_post_neurons.Vm/mV)**2).mean(axis=0), label='MSE')
             plt.build()
             plt.save_fig(f'{args.save_path}/fig6.txt', keep_colors=True)
+
 
         elif args.protocol == 2:
             pairs_timing = (spikemon_post_neurons.t[:trial_duration]
