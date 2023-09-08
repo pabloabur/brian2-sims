@@ -67,6 +67,11 @@ freq <- bind_rows(df_rates_init, df_rates_final) %>%
         geom_histogram(alpha=.3)
 ggsave(str_replace(argv$dest, '.png', '_freq.png'), freq)
 
+raster_init <- df_raster %>% filter(time_ms>=0*1000 & time_ms<=5*1000) %>% ggplot(aes(x=time_ms, y=id)) + geom_point(shape=20, size=.1, alpha=.01) + theme_bw()
+raster_final <- df_raster %>% filter(time_ms>=190*1000 & time_ms<=195*1000) %>% ggplot(aes(x=time_ms, y=id)) + geom_point(shape=20, size=.1, alpha=.01) + theme_bw()
+raster <- raster_init / raster_final
+ggsave(str_replace(argv$dest, '.png', '_raster.png'), raster)
+
 mean_cv <- mean(df_base_stats$sd_isi/df_base_stats$mean_isi, na.rm=T)
 print("Mean CV: ")
 print(mean_cv)
@@ -125,6 +130,3 @@ hist_counts = hist(df_fano_factor_final$time_ms, hist_bins, plot=F, right=F)$cou
 fno = var(hist_counts)/mean(hist_counts)
 print("Fano factor in the last 50 seconds: ")
 print(fno)
-
-#options("browser"="brave")
-#ggplotly(raster)
