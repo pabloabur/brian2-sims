@@ -324,25 +324,20 @@ def stdp(args):
 
     """ =================== Saving data =================== """
     output_spikes = pd.DataFrame(
-        {'time_ms': np.array(spikemon_post_neurons.t/defaultclock.dt),
-         'id': np.array(spikemon_post_neurons.i)})
-    output_spikes.to_csv(f'{args.save_path}/post_spikes.csv', index=False)
-    output_spikes = pd.DataFrame(
         {'time_ms': np.array(active_monitor.t/defaultclock.dt),
          'id': np.array(active_monitor.i)})
     output_spikes.to_csv(f'{args.save_path}/events_spikes.csv', index=False)
-    output_spikes = pd.DataFrame(
-            {'time_ms': np.array(spikemon_pre_neurons.t/defaultclock.dt),
-             'id': np.array(spikemon_pre_neurons.i)})
-    output_spikes.to_csv(f'{args.save_path}/post_spikes.csv', index=False)
 
-    output_vars = statemonitors2dataframe([statemon_post_synapse])
+    output_vars = statemonitors2dataframe([statemon_post_synapse,
+                                           ref_statemon_post_synapse])
     output_vars.to_csv(f'{args.save_path}/synapse_vars.csv', index=False)
 
     if args.protocol < 3:
-        output_vars = statemonitors2dataframe([statemon_post_neurons,
-                                               statemon_pre_neurons])
-        output_vars.to_csv(f'{args.save_path}/neuron_vars.csv', index=False)
+        output_vars = statemonitors2dataframe([statemon_pre_neurons,
+                                           statemon_post_neurons,
+                                           ref_statemon_pre_neurons,
+                                           ref_statemon_post_neurons])
+        output_vars.to_csv(f'{args.save_path}/state_vars.csv', index=False)
 
     if not args.quiet:
         if args.protocol == 1:
