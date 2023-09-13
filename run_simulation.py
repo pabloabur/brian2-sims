@@ -132,7 +132,12 @@ subparser_stdp.add_argument('--precision',
                             type=str,
                             default='fp64',
                             help=f'Bit precision used. Currently only supports '
-                                 f'8 and 64')
+                                 f'8 and 64.')
+subparser_stdp.add_argument('--event_condition',
+                            type=str,
+                            default= 'abs(Ca) > 0.01',
+                            help=f'Condition uppon a plasticity event is '
+                                 f'triggered.')
 subparser_stdp.set_defaults(func=stdp)
 
 subparser_balance_stdp = subparsers.add_parser(

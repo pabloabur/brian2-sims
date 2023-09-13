@@ -11,6 +11,7 @@ import feather
 import pandas as pd
 import quantities as q
 import sys
+import json
 
 from brian2 import run, device, defaultclock, scheduling_summary,\
     SpikeGeneratorGroup, StateMonitor, SpikeMonitor, TimedArray, PoissonInput,\
@@ -154,9 +155,11 @@ def stdp(args):
     ref_synapse_model = CUBA()
     ref_stdp_model = STDP()
 
+    neuron_model.modify_model('events', args.event_condition, key='active_Ca',)
+
     """ ================ Protocol specifications ================ """
     if args.protocol == 1:
-        N_pre, N_post = 2, 2
+        N_pre, N_post = 10, 10
         n_conns = N_pre
         sampled_weights = [11 for _ in range(n_conns)]
         static_weight = 120
@@ -168,10 +171,10 @@ def stdp(args):
         ref_neuron_model.model += 'gtot1 : volt\n'
 
         pre_spikegenerator, post_spikegenerator, tmax = stimuli_protocol1()
-        pre_neurons = create_neurons(2, neuron_model)
-        ref_pre_neurons = create_neurons(2, ref_neuron_model)
-        post_neurons = create_neurons(2, neuron_model)
-        ref_post_neurons = create_neurons(2, ref_neuron_model)
+        pre_neurons = create_neurons(N_pre, neuron_model)
+        ref_pre_neurons = create_neurons(N_pre, ref_neuron_model)
+        post_neurons = create_neurons(N_post, neuron_model)
+        ref_post_neurons = create_neurons(N_post, ref_neuron_model)
 
         synapse_model.modify_model('parameters',
                                    aux_w_sample(static_weight),
@@ -323,6 +326,11 @@ def stdp(args):
         device.build(args.code_path)
 
     """ =================== Saving data =================== """
+    metadata = {'event_condition': args.event_condition
+                }
+    with open(f'{args.save_path}/metadata.json', 'w') as f:
+        json.dump(metadata, f)
+
     output_spikes = pd.DataFrame(
         {'time_ms': np.array(active_monitor.t/defaultclock.dt),
          'id': np.array(active_monitor.i)})

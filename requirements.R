@@ -12,3 +12,5 @@ install.packages('jsonlite', dependencies=TRUE, repos='http://cran.rstudio.com/'
 if (!library(jsonlite, logical.return=T)) quit(save='no', status=10, runLast=F)
 install.packages('wesanderson', dependencies=TRUE, repos='http://cran.rstudio.com/')
 if (!library(wesanderson, logical.return=T)) quit(save='no', status=10, runLast=F)
+install.packages('latex2exp', dependencies=TRUE, repos='http://cran.rstudio.com/')
+if (!library(latex2exp, logical.return=T)) quit(save='no', status=10, runLast=F)
