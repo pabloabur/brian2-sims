@@ -159,6 +159,8 @@ def stdp(args):
 
     """ ================ Protocol specifications ================ """
     if args.protocol == 1:
+        pre_spikegenerator, post_spikegenerator, tmax = stimuli_protocol1()
+
         N_pre, N_post = 10, 10
         n_conns = N_pre
         sampled_weights = [11 for _ in range(n_conns)]
@@ -170,7 +172,6 @@ def stdp(args):
                                       old_expr='gtot = gtot0')
         ref_neuron_model.model += 'gtot1 : volt\n'
 
-        pre_spikegenerator, post_spikegenerator, tmax = stimuli_protocol1()
         pre_neurons = create_neurons(N_pre, neuron_model)
         ref_pre_neurons = create_neurons(N_pre, ref_neuron_model)
         post_neurons = create_neurons(N_post, neuron_model)
@@ -210,11 +211,12 @@ def stdp(args):
 
     elif args.protocol == 2:
         tapre, tapost, tmax, N, trial_duration = stimuli_protocol2()
+
         N_pre, N_post = N, N
         n_conns = N
         conn_condition = 'i==j'
-
         sampled_weights = [50 for _ in range(n_conns)]
+
         # TODO for fp8? The idea is to inject current so neurons spikes, but maybe I dont have to
         #neuron_model.modify_model(
         #    'model',
@@ -223,18 +225,23 @@ def stdp(args):
         neuron_model.modify_model('threshold',
                                   'tapre(t, i) == 1',
                                   old_expr='Vm > Vthr')
-        pre_neurons = create_neurons(N, neuron_model)
+        ref_neuron_model.modify_model('threshold',
+                                  'tapre(t, i) == 1',
+                                  old_expr='Vm > Vthr')
 
-        #neuron_model.modify_model(
-        #    'model',
-        #    'summed_decay = tapost(t, i)',
-        #    old_expr='summed_decay = fp8_add(decay_term, gtot*int(not_refractory))')
+        pre_neurons = create_neurons(N, neuron_model)
+        ref_pre_neurons = create_neurons(N, ref_neuron_model)
+
         neuron_model.modify_model('threshold', 'tapost', old_expr='tapre')
         post_neurons = create_neurons(N, neuron_model)
+        ref_post_neurons = create_neurons(N, ref_neuron_model)
 
         stdp_model.modify_model('connection',
                                 conn_condition,
                                 key='condition')
+        ref_stdp_model.modify_model('connection',
+                                     conn_condition,
+                                     key='condition')
 
         tmax = tmax * ms
 
