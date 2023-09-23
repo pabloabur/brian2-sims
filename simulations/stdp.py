@@ -322,7 +322,7 @@ def stdp(args):
                                         record=range(n_conns),
                                         name='statemon_post_synapse')
     ref_statemon_post_synapse = StateMonitor(ref_stdp_synapse,
-                                        variables=['w_plast'],
+                                        variables=['w_plast', 'i_trace',  'j_trace'],
                                         record=range(n_conns),
                                         name='ref_statemon_post_synapse')
     active_monitor = EventMonitor(pre_neurons, 'active_Ca', 'Ca')
@@ -356,23 +356,30 @@ def stdp(args):
 
     if not args.quiet:
         if args.protocol == 1:
-            delta_ti = 0
-            delta_tf = -1
-            plt.scatter(spikemon_pre_neurons.t[delta_ti:delta_tf]/ms,
-                        spikemon_pre_neurons.i[delta_ti:delta_tf])
-            plt.scatter(spikemon_post_neurons.t[delta_ti:delta_tf]/ms,
-                        spikemon_post_neurons.i[delta_ti:delta_tf])
+            delta_ti = 500
+            delta_tf = 1000
+            plt.scatter(spikemon_pre_neurons.t/ms, spikemon_pre_neurons.i)
+            plt.scatter(spikemon_post_neurons.t/ms, spikemon_post_neurons.i)
             plt.build()
             plt.title('Spikes')
             plt.save_fig(f'{args.save_path}/fig1.txt', keep_colors=True)
 
             plt.clear_figure()
+            plt.plot(ref_statemon_post_synapse.t[delta_ti:delta_tf]/ms,
+                     ref_statemon_post_synapse.j_trace[0][delta_ti:delta_tf], label='base_post')
+            plt.plot(ref_statemon_post_synapse.t[delta_ti:delta_tf]/ms,
+                     ref_statemon_post_synapse.i_trace[0][delta_ti:delta_tf], label='base_pre')
+            plt.title('Reference time window evolution')
+            plt.build()
+            plt.save_fig(f'{args.save_path}/fig2.txt', keep_colors=True)
+
+            plt.clear_figure()
             plt.plot(statemon_post_neurons.t[delta_ti:delta_tf]/ms,
                      aux_plot_Ca(
-                         statemon_post_neurons.Ca[0][delta_ti:delta_tf]))
+                         statemon_post_neurons.Ca[0][delta_ti:delta_tf]), label='base_post')
             plt.plot(statemon_pre_neurons.t[delta_ti:delta_tf]/ms,
                      aux_plot_Ca(
-                         statemon_pre_neurons.Ca[0][delta_ti:delta_tf]))
+                         statemon_pre_neurons.Ca[0][delta_ti:delta_tf]), label='base_pre')
             plt.title('Time window evolution')
             plt.build()
             plt.save_fig(f'{args.save_path}/fig3.txt', keep_colors=True)
