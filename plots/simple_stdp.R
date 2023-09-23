@@ -38,7 +38,7 @@ df_post_ca_trace <- df_vars %>%
 
 b_rang <- c(0, 310, 420, 720, 800, 1110, 1210, 1510, 1610, 2010, 2080, 2320)
 w_trace <- df_weights %>%
-    filter(variable=='w_plast' & monitor=='ref_statemon_post_synapse') %>%
+    filter(variable=='w_plast' & monitor=='statemon_post_synapse') %>%
     mutate(value=value * 1000) %>%
     ggplot(aes(x=time_ms, y=value)) + labs(x='time (ms)', y='weight (mV)') +
     geom_line() + theme_bw() +
@@ -57,9 +57,10 @@ w_trace <- df_weights %>%
 
 # Mean is taken over all connections, i.e. id
 mse_w <- df_weights %>%
-    filter(variable=='w_plast') %>%
+    filter(variable == 'w_plast') %>%
+    mutate(value = value * 1000) %>%
     group_by(time_ms, id) %>%
-    mutate(squared_error = diff(value)^2) %>%
+    summarise(squared_error = diff(value)^2) %>%
     group_by(time_ms) %>%
     summarise(mse = mean(squared_error)) %>%
     ggplot(aes(x=time_ms, y=mse)) + labs(x='time (ms)', y='mean squared error') +
