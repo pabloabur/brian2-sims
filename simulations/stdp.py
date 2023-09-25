@@ -300,6 +300,8 @@ def stdp(args):
                                         name='spikemon_pre_neurons')
     spikemon_post_neurons = SpikeMonitor(post_neurons,
                                          name='spikemon_post_neurons')
+    ref_spikemon_post_neurons = SpikeMonitor(ref_post_neurons,
+                                             name='ref_spikemon_post_neurons')
     if args.protocol < 3:
         statemon_pre_neurons = StateMonitor(pre_neurons,
                                             variables=['Vm', 'g', 'Ca'],
@@ -413,26 +415,38 @@ def stdp(args):
                             - spikemon_post_neurons.t[:trial_duration][::-1])/ms
             plt.plot(pairs_timing,
                      aux_plot(statemon_post_synapse.w_plast[:, -1]))
+            pairs_timing = (ref_spikemon_post_neurons.t[:trial_duration]
+                            - ref_spikemon_post_neurons.t[:trial_duration][::-1])/ms
+            plt.plot(pairs_timing, ref_statemon_post_synapse.w_plast[:, -1]/mV)
             plt.build()
-            plt.save_fig(f'{args.save_path}/fig1.txt')
+            plt.save_fig(f'{args.save_path}/fig1.txt', keep_colors=True)
 
             plt.clear_figure()
             plt.plot(aux_plot_Ca(statemon_pre_neurons.Ca[0][:100]))
             plt.plot(aux_plot_Ca(statemon_post_neurons.Ca[0][:100]))
             plt.build()
-            plt.save_fig(f'{args.save_path}/fig2.txt')
+            plt.save_fig(f'{args.save_path}/fig2.txt', keep_colors=True)
 
             plt.clear_figure()
             plt.plot(aux_plot_Ca(statemon_pre_neurons.Ca[29][:100]))
             plt.plot(aux_plot_Ca(statemon_post_neurons.Ca[29][:100]))
             plt.build()
-            plt.save_fig(f'{args.save_path}/fig3.txt')
+            plt.save_fig(f'{args.save_path}/fig3.txt', keep_colors=True)
 
             plt.clear_figure()
             plt.scatter(spikemon_pre_neurons.t[:150]/ms, spikemon_pre_neurons.i[:150])
             plt.scatter(spikemon_post_neurons.t[:150]/ms, spikemon_post_neurons.i[:150])
             plt.build()
-            plt.save_fig(f'{args.save_path}/fig4.txt')
+            plt.save_fig(f'{args.save_path}/fig4.txt', keep_colors=True)
+
+            plt.clear_figure()
+            plt.subplots(2, 1)
+            plt.subplot(1, 1).title('Weight mean square error')
+            plt.plot(((statemon_post_synapse.w_plast/mV - ref_statemon_post_synapse.w_plast/mV)**2).mean(axis=0), label='MSE')
+            plt.subplot(2, 1).title('Vm mean square error')
+            plt.plot(((statemon_post_neurons.Vm/mV - ref_statemon_post_neurons.Vm/mV)**2).mean(axis=0), label='MSE')
+            plt.build()
+            plt.save_fig(f'{args.save_path}/fig5.txt', keep_colors=True)
 
         elif args.protocol == 3:
             plt.hist(aux_plot(statemon_post_synapse.w_plast[:, -1]))
