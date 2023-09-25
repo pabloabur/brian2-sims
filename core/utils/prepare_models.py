@@ -58,3 +58,4 @@ def set_hardwarelike_scheme(prefs, neurons, run_reg_dt):
             dt=run_reg_dt,
             when='after_synapses',
             order=1)
+        neu.set_event_schedule('active_Ca', when='after_resets')
