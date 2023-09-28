@@ -7,10 +7,8 @@ Zurich and ETH Zurich, 2018.
 """
 
 import numpy as np
-import feather
 import pandas as pd
 import quantities as q
-import sys
 import json
 
 from brian2 import run, device, defaultclock, scheduling_summary,\
@@ -20,6 +18,7 @@ from brian2 import mV, second, Hz, ms
 
 import plotext as plt
 
+from core.equations.base_equation import ParamDict
 from core.utils.misc import minifloat2decimal, decimal2minifloat
 from core.utils.process_responses import neurons_rate, statemonitors2dataframe
 from core.utils.prepare_models import generate_connection_indices,\
@@ -42,7 +41,7 @@ DEFAULT_FUNCTIONS.update({'minifloat2decimal': minifloat2decimal})
 
 
 def stimuli_protocol1():
-    """Stimulus gneration for STDP protocols.
+    """Stimulus generation for STDP protocols.
 
     This function returns two brian2 objects.
     Both are Spikegeneratorgroups which hold a single index each
@@ -160,6 +159,7 @@ def stdp(args):
     """ ================ Protocol specifications ================ """
     if args.protocol == 1:
         pre_spikegenerator, post_spikegenerator, tmax = stimuli_protocol1()
+        w_mon_dt = defaultclock.dt
 
         N_pre, N_post = 10, 10
         n_conns = N_pre
@@ -211,6 +211,7 @@ def stdp(args):
 
     elif args.protocol == 2:
         tapre, tapost, tmax, N, trial_duration = stimuli_protocol2()
+        w_mon_dt = defaultclock.dt
 
         N_pre, N_post = N, N
         n_conns = N
@@ -226,13 +227,14 @@ def stdp(args):
                                   'tapre(t, i) == 1',
                                   old_expr='Vm > Vthr')
         ref_neuron_model.modify_model('threshold',
-                                  'tapre(t, i) == 1',
-                                  old_expr='Vm > Vthr')
+                                      'tapre(t, i) == 1',
+                                      old_expr='Vm > Vthr')
 
         pre_neurons = create_neurons(N, neuron_model)
         ref_pre_neurons = create_neurons(N, ref_neuron_model)
 
         neuron_model.modify_model('threshold', 'tapost', old_expr='tapre')
+        ref_neuron_model.modify_model('threshold', 'tapost', old_expr='tapre')
         post_neurons = create_neurons(N, neuron_model)
         ref_post_neurons = create_neurons(N, ref_neuron_model)
 
@@ -251,20 +253,56 @@ def stdp(args):
         N_pre = 1000
         N_post = 1
         n_conns = N_pre
-        sampled_weights = rng.gamma(.1, 1.75, n_conns)
-        tmax = 10000 * ms
+        sampled_weights = rng.gamma(1, 17.5, n_conns)
+        tmax = 100000 * ms
         conn_condition = None
+        w_mon_dt = 1000 * ms
 
         post_neurons = create_neurons(N_post, neuron_model)
+        ref_post_neurons = create_neurons(N_post, ref_neuron_model)
+
         neuron_model.modify_model('threshold', 'rand()<rates*dt')
         neuron_model.model += 'rates : Hz\n'
-        neuron_model.modify_model('parameters', rng.uniform(5, 15, N_pre)*ms, key='tau_ca')
+        neuron_model.modify_model('parameters', rng.uniform(5, 15, N_pre)*ms,
+                                  key='tau_ca')
         pre_neurons = create_neurons(N_pre, neuron_model)
-        pre_neurons.rates = 15*Hz
+        pre_neurons.rates = 50*Hz#TODO 15*Hz
 
         stdp_model.modify_model('connection',
                                 conn_condition,
                                 key='condition')
+        ref_stdp_model.modify_model('model', 'tau_syn_ref',
+                                    old_expr='tau_syn')
+        ref_stdp_model.modify_model('model', 'alpha_syn_ref',
+                                    old_expr='alpha_syn')
+        ref_stdp_model.modify_model('parameters', 9*ms,
+                                    key='tau_itrace')
+        ref_stdp_model.modify_model('parameters', 14*ms,
+                                    key='tau_jtrace')
+        ref_stdp_model.modify_model('on_post', 'j_trace += 1.05',
+                                    old_expr='j_trace += 1')
+        ref_stdp_model.modify_model('on_pre',
+                                    'g_syn += ',
+                                    old_expr='g += ')
+        ref_stdp_model.modify_model('model',
+                                    f'dg_syn/dt = alpha_syn_ref*g_syn/second '
+                                    f': volt (clock-driven)',
+                                    old_expr=f'dg/dt = alpha_syn_ref*g/second '
+                                             f': volt (clock-driven)')
+        ref_stdp_model.modify_model('model',
+                                    'gtot0_post = g_syn*w_factor : volt (summed)',
+                                    old_expr='gtot0_post = g*w_factor : volt (summed)')
+        ref_stdp_model.parameters = ParamDict({**ref_stdp_model.parameters,
+                                               **{'tau_syn_ref':  '5*ms'}})
+        del ref_stdp_model.parameters['tau_syn']
+        ref_stdp_model.parameters = ParamDict({**ref_stdp_model.parameters,
+                                               **{'alpha_syn_ref': f'tau_syn_ref'
+                                                                   f'/(dt + tau_syn_ref)'
+                                                  }})
+        del ref_stdp_model.parameters['alpha_syn']
+        ref_stdp_model.modify_model('connection',
+                                     conn_condition,
+                                     key='condition')
 
     """ ================ General specifications ================ """
     stdp_model.modify_model('parameters',
@@ -287,7 +325,7 @@ def stdp(args):
                                    post_neurons,
                                    stdp_model,
                                    name='stdp_synapse')
-    ref_stdp_synapse = create_synapses(ref_pre_neurons,
+    ref_stdp_synapse = create_synapses(pre_neurons,
                                        ref_post_neurons,
                                        ref_stdp_model,
                                        name='ref_stdp_synapse')
@@ -322,9 +360,11 @@ def stdp(args):
     statemon_post_synapse = StateMonitor(stdp_synapse,
                                         variables=['w_plast'],
                                         record=range(n_conns),
+                                        dt=w_mon_dt,
                                         name='statemon_post_synapse')
     ref_statemon_post_synapse = StateMonitor(ref_stdp_synapse,
                                         variables=['w_plast', 'i_trace',  'j_trace'],
+                                        dt=w_mon_dt,
                                         record=range(n_conns),
                                         name='ref_statemon_post_synapse')
     active_monitor = EventMonitor(pre_neurons, 'active_Ca', 'Ca')
@@ -344,6 +384,22 @@ def stdp(args):
         {'time_ms': np.array(active_monitor.t/defaultclock.dt),
          'id': np.array(active_monitor.i)})
     output_spikes.to_csv(f'{args.save_path}/events_spikes.csv', index=False)
+    output_spikes = pd.DataFrame(
+        {'time_ms': np.array(spikemon_pre_neurons.t/defaultclock.dt),
+         'id': np.array(spikemon_pre_neurons.i)}
+    )
+    output_spikes.to_csv(f'{args.save_path}/spikes_pre.csv', index=False)
+    # do the same for post and ref
+    output_spikes = pd.DataFrame(
+        {'time_ms': np.array(spikemon_post_neurons.t/defaultclock.dt),
+         'id': np.array(spikemon_post_neurons.i)}
+    )
+    output_spikes.to_csv(f'{args.save_path}/spikes_post.csv', index=False)
+    output_spikes = pd.DataFrame(
+        {'time_ms': np.array(ref_spikemon_post_neurons.t/defaultclock.dt),
+         'id': np.array(ref_spikemon_post_neurons.i)}
+    )
+    output_spikes.to_csv(f'{args.save_path}/ref_spikes_post.csv', index=False)
 
     output_vars = statemonitors2dataframe([statemon_post_synapse,
                                            ref_statemon_post_synapse])
@@ -351,10 +407,19 @@ def stdp(args):
 
     if args.protocol < 3:
         output_vars = statemonitors2dataframe([statemon_pre_neurons,
-                                           statemon_post_neurons,
-                                           ref_statemon_pre_neurons,
-                                           ref_statemon_post_neurons])
+                                               statemon_post_neurons,
+                                               ref_statemon_pre_neurons,
+                                               ref_statemon_post_neurons])
         output_vars.to_csv(f'{args.save_path}/state_vars.csv', index=False)
+    elif args.protocol == 3:
+        # save weights to disk, directly from synapse object
+        output_vars = pd.DataFrame(
+            {'w_plast': np.hstack((stdp_synapse.w_plast,
+                                   ref_stdp_synapse.w_plast)),
+             'label': (['Proposed' for _ in range(len(stdp_synapse.w_plast))]
+                      + ['Original' for _ in range(len(ref_stdp_synapse.w_plast))])
+             })
+        output_vars.to_csv(f'{args.save_path}/synapse_vars_weights.csv', index=False)
 
     if not args.quiet:
         if args.protocol == 1:

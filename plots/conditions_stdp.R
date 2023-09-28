@@ -1,0 +1,6 @@
+df_pre <- read.csv(file.path(argv$source, 'spikes_pre.csv'))
+p <- df_pre %>% group_by(time_ms) %>% summarise(num_fetch=n()) %>% ggplot(aes(x=time_ms, y=num_fetch)) + geom_line()
+ggplotly(p)
+df_events <- read.csv(file.path(argv$source, 'events_spikes.csv'))
+p <- df_events %>% group_by(time_ms) %>% summarise(num_fetch=n()) %>% ggplot(aes(x=time_ms, y=num_fetch)) + geom_line()
+ggplotly(p)

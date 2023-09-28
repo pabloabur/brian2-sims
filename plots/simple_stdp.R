@@ -2,6 +2,7 @@ suppressPackageStartupMessages(library(ggplot2))
 suppressPackageStartupMessages(library(dplyr))
 suppressPackageStartupMessages(library(patchwork))
 suppressPackageStartupMessages(library(latex2exp))
+suppressPackageStartupMessages(library(stringr))
 
 library(wesanderson)
 color_map <- wes_palette('GrandBudapest1')
@@ -38,10 +39,12 @@ df_post_ca_trace <- df_vars %>%
 
 b_rang <- c(0, 310, 420, 720, 800, 1110, 1210, 1510, 1610, 2010, 2080, 2320)
 w_trace <- df_weights %>%
-    filter(variable=='w_plast' & monitor=='statemon_post_synapse') %>%
+    filter(variable=='w_plast') %>%
+    mutate(monitor = str_replace_all(monitor, c('ref_statemon_post_synapse' = 'Original',
+                                                'statemon_post_synapse' = 'Proposed'))) %>%
     mutate(value=value * 1000) %>%
-    ggplot(aes(x=time_ms, y=value)) + labs(x='time (ms)', y='weight (mV)') +
-    geom_line() + theme_bw() +
+    ggplot(aes(x=time_ms, y=value, color=monitor)) + labs(x='time (ms)', y='weight (mV)', color='STDP method') +
+    geom_line() + theme_bw() + scale_color_manual(values=c("#000000", color_map[4])) +
     annotate("rect", xmin=b_rang[1], xmax=b_rang[2], ymin=10.75, ymax=11.36, alpha=0.3, fill=color_map[1]) +
     annotate("rect", xmin=b_rang[3], xmax=b_rang[4], ymin=10.75, ymax=11.36, alpha=0.3, fill=color_map[1]) +
     annotate("rect", xmin=b_rang[5], xmax=b_rang[6], ymin=10.75, ymax=11.36, alpha=0.3, fill=color_map[1]) +
