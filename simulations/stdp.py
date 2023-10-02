@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 import quantities as q
 import json
+import feather
 
 from brian2 import run, device, defaultclock, scheduling_summary,\
     SpikeGeneratorGroup, StateMonitor, SpikeMonitor, TimedArray, PoissonInput,\
@@ -263,10 +264,11 @@ def stdp(args):
 
         neuron_model.modify_model('threshold', 'rand()<rates*dt')
         neuron_model.model += 'rates : Hz\n'
-        neuron_model.modify_model('parameters', rng.uniform(5, 15, N_pre)*ms,
+        # TODO get back to good setting
+        neuron_model.modify_model('parameters', rng.uniform(13, 28, N_pre)*ms,
                                   key='tau_ca')
         pre_neurons = create_neurons(N_pre, neuron_model)
-        pre_neurons.rates = 50*Hz#TODO 15*Hz
+        pre_neurons.rates = 15*Hz
 
         stdp_model.modify_model('connection',
                                 conn_condition,
@@ -275,9 +277,9 @@ def stdp(args):
                                     old_expr='tau_syn')
         ref_stdp_model.modify_model('model', 'alpha_syn_ref',
                                     old_expr='alpha_syn')
-        ref_stdp_model.modify_model('parameters', 9*ms,
+        ref_stdp_model.modify_model('parameters', 13*ms,
                                     key='tau_itrace')
-        ref_stdp_model.modify_model('parameters', 14*ms,
+        ref_stdp_model.modify_model('parameters', 28*ms,
                                     key='tau_jtrace')
         ref_stdp_model.modify_model('on_post', 'j_trace += 1.05',
                                     old_expr='j_trace += 1')
@@ -305,9 +307,12 @@ def stdp(args):
                                      key='condition')
 
     """ ================ General specifications ================ """
+    # TODO might not need it
+    stdp_model.modify_model('namespace', 0.5*mV, key='w_max')
     stdp_model.modify_model('parameters',
                             aux_w_sample(sampled_weights),
                             key='w_plast')
+    ref_stdp_model.modify_model('namespace', 0.5*mV, key='w_max')
     ref_stdp_model.modify_model('parameters',
                                 sampled_weights*mV,
                                 key='w_plast')
@@ -383,7 +388,7 @@ def stdp(args):
     output_spikes = pd.DataFrame(
         {'time_ms': np.array(active_monitor.t/defaultclock.dt),
          'id': np.array(active_monitor.i)})
-    output_spikes.to_csv(f'{args.save_path}/events_spikes.csv', index=False)
+    feather.write_dataframe(output_spikes, f'{args.save_path}/events_spikes.feather')
     output_spikes = pd.DataFrame(
         {'time_ms': np.array(spikemon_pre_neurons.t/defaultclock.dt),
          'id': np.array(spikemon_pre_neurons.i)}
