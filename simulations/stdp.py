@@ -254,6 +254,7 @@ def stdp(args):
         N_pre = 1000
         N_post = 1
         n_conns = N_pre
+        # TODO better sample better weights
         sampled_weights = rng.gamma(1, 17.5, n_conns)
         tmax = 100000 * ms
         conn_condition = None
@@ -262,10 +263,19 @@ def stdp(args):
         post_neurons = create_neurons(N_post, neuron_model)
         ref_post_neurons = create_neurons(N_post, ref_neuron_model)
 
+        neuron_model.model += 'event_count : 1\n'
+        mon_active_neurons = create_neurons(1, neuron_model)
+        mon_active_neurons.run_regularly(
+            'event_count = 0',
+            name=f'clear_event_counter',
+            dt=1*ms,
+            when='after_synapses',
+            order=1)
+
         neuron_model.modify_model('threshold', 'rand()<rates*dt')
         neuron_model.model += 'rates : Hz\n'
-        # TODO get back to good setting
-        neuron_model.modify_model('parameters', rng.uniform(13, 28, N_pre)*ms,
+        # TODO 15 30 better than 10 25 in this case?
+        neuron_model.modify_model('parameters', 'clip(30*rand(), 15, 30)*ms',
                                   key='tau_ca')
         pre_neurons = create_neurons(N_pre, neuron_model)
         pre_neurons.rates = 15*Hz
@@ -307,7 +317,6 @@ def stdp(args):
                                      key='condition')
 
     """ ================ General specifications ================ """
-    # TODO might not need it
     stdp_model.modify_model('namespace', 0.5*mV, key='w_max')
     stdp_model.modify_model('parameters',
                             aux_w_sample(sampled_weights),
@@ -354,6 +363,18 @@ def stdp(args):
                                             variables=['Vm'],
                                             record=range(N_pre),
                                             name='ref_statemon_pre_neurons')
+    elif args.protocol == 3:
+        stdp_model.on_pre['stdp_fanout'] = f'''
+            event_count_post += 1
+            '''
+        stdp_model.modify_model('connection', 1., key='p')
+        stdp_mon_events = create_synapses(pre_neurons, mon_active_neurons, stdp_model)
+        active_monitor = StateMonitor(mon_active_neurons,
+                                      'event_count',
+                                      record=0,
+                                      when='after_synapses',
+                                      order=0,
+                                      name='event_count_monitor')
     statemon_post_neurons = StateMonitor(post_neurons,
                                          variables=['Vm', 'g', 'Ca'],
                                          record=range(N_post),
@@ -372,7 +393,6 @@ def stdp(args):
                                         dt=w_mon_dt,
                                         record=range(n_conns),
                                         name='ref_statemon_post_synapse')
-    active_monitor = EventMonitor(pre_neurons, 'active_Ca', 'Ca')
 
     run(tmax, report='stdout', namespace=run_namespace)
 
@@ -387,7 +407,7 @@ def stdp(args):
 
     output_spikes = pd.DataFrame(
         {'time_ms': np.array(active_monitor.t/defaultclock.dt),
-         'id': np.array(active_monitor.i)})
+         'num_fetch': np.array(active_monitor.event_count[0])})
     feather.write_dataframe(output_spikes, f'{args.save_path}/events_spikes.feather')
     output_spikes = pd.DataFrame(
         {'time_ms': np.array(spikemon_pre_neurons.t/defaultclock.dt),

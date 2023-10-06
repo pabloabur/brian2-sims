@@ -25,23 +25,19 @@ df_control$group <- "control"
 
 df_events <- map2(events_list, metadata_list,
                   function(x, y) mutate(x, group = y$event_condition))
-rm(events_list)
 df_events <- list_rbind(df_events)
 df_events <- full_join(df_events, df_control)
-rm(df_control)
-gc()
+
 p <- df_events %>%
-    group_by(time_ms, group) %>%
-    summarise(num_fetch=n()) %>%
     ggplot(aes(x=time_ms, y=num_fetch, color=group)) + geom_line()
 
-df_weights <- read.csv('sim_data/stdp_test/02-10_18h40m08s//synapse_vars_weights.csv')
+df_weights <- read.csv(str_replace(nth(dir_list, -1), "events_spikes.feather", "synapse_vars_weights.csv"))
 w_distribution <- df_weights %>%
-    filter(label=='Original') %>%
+    filter(label=='Proposed') %>%
     ggplot(aes(x=w_plast, color=label, fill=label)) + geom_histogram(alpha=0.8) +
     theme_bw() + theme(legend.position="none") +
     labs(x='weights (mV)', color=element_blank(), fill=element_blank())
-df_spk <- read.csv('sim_data/stdp_test/02-10_18h40m08s//spikes_post.csv')
+df_spk <- read.csv(str_replace(nth(dir_list, -1), "events_spikes.feather", "spikes_post.csv"))
 rates <- df_spk %>% ggplot(aes(x=time_ms)) + geom_histogram()
 fig <- p / w_distribution / rates
 ggsave(argv$dest, fig)
