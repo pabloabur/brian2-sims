@@ -19,8 +19,13 @@ dir_info <- Sys.glob(file.path(wd, argv$source, '*/', 'metadata.json'))
 metadata_list <- map(dir_info, fromJSON)
 
 # Arbitrary simulation result to use as control, i.e. folder 1
-control_dir <- str_replace(dir_list[1], "events_spikes.feather", "spikes_pre.csv")
-df_control <- read.csv(control_dir)
+control_dir <- Sys.glob(str_replace(dir_list[1], "events_spikes.feather", "spikes_*.csv"))
+spike_origin <- map_chr(control_dir,
+                        function(x) str_extract(x, "spikes_[:alpha:]+(?=.)"))
+df_control <- map(control_dir, read.csv)
+df_control <- map2(df_control, spike_origin, function(x,y) mutate(x, origin=y))
+df_control <- list_rbind(df_control)
+df_control <- df_control %>% group_by(time_ms) %>% summarise(num_fetch=n())
 df_control$group <- "control"
 
 df_events <- map2(events_list, metadata_list,
