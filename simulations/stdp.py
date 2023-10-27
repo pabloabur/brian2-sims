@@ -254,7 +254,6 @@ def stdp(args):
         N_pre = 1000
         N_post = 1
         n_conns = N_pre
-        # TODO better sample better weights
         sampled_weights = rng.gamma(1, 17.5, n_conns)
         tmax = 100000 * ms
         conn_condition = None
@@ -274,7 +273,6 @@ def stdp(args):
 
         neuron_model.modify_model('threshold', 'rand()<rates*dt')
         neuron_model.model += 'rates : Hz\n'
-        # TODO 15 30 better than 10 25 in this case?
         neuron_model.modify_model('parameters', 'clip(30*rand(), 15, 30)*ms',
                                   key='tau_ca')
         pre_neurons = create_neurons(N_pre, neuron_model)
