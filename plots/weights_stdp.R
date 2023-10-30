@@ -21,6 +21,7 @@ kernel <- df_weights %>%
                                                 'statemon_post_synapse' = 'Proposed'))) %>%
     ggplot(aes(x=id, y=value, color=monitor)) + geom_line() + theme_bw() +
     labs(x=TeX(r'($\Delta$\;t (ms))'), y='weight (mV)', color=element_blank()) +
+    guides(color=guide_legend(override.aes=list(linewidth=4))) +
     scale_color_manual(values=color_map) + theme(legend.position = c(0.25, 0.8))
 
 kernel_mse <- df_weights %>%
