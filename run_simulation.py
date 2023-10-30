@@ -133,6 +133,11 @@ subparser_stdp.add_argument('--precision',
                             default='fp64',
                             help=f'Bit precision used. Currently only supports '
                                  f'8 and 64.')
+subparser_stdp.add_argument('--w_max',
+                            type=float,
+                            default=100,
+                            help=f'Maximum weight value, in mV. Used '
+                                 f'only in protocol 3.')
 subparser_stdp.add_argument('--event_condition',
                             type=str,
                             default= 'abs(Ca) > 0.01',

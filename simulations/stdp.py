@@ -254,7 +254,7 @@ def stdp(args):
         N_pre = 1000
         N_post = 1
         n_conns = N_pre
-        sampled_weights = rng.gamma(1, 17.5, n_conns)
+        sampled_weights = 0.3 # rng.gamma(1, 17.5, n_conns)
         tmax = 100000 * ms
         conn_condition = None
         w_mon_dt = 1000 * ms
@@ -273,7 +273,7 @@ def stdp(args):
 
         neuron_model.modify_model('threshold', 'rand()<rates*dt')
         neuron_model.model += 'rates : Hz\n'
-        neuron_model.modify_model('parameters', 'clip(30*rand(), 15, 30)*ms',
+        neuron_model.modify_model('parameters', '(10*rand() + 16)*ms', #  '(10*rand() + 5)*ms'
                                   key='tau_ca')
         pre_neurons = create_neurons(N_pre, neuron_model)
         pre_neurons.rates = 15*Hz
@@ -315,11 +315,11 @@ def stdp(args):
                                      key='condition')
 
     """ ================ General specifications ================ """
-    stdp_model.modify_model('namespace', 0.5*mV, key='w_max')
+    stdp_model.modify_model('namespace', args.w_max*mV, key='w_max')
     stdp_model.modify_model('parameters',
                             aux_w_sample(sampled_weights),
                             key='w_plast')
-    ref_stdp_model.modify_model('namespace', 0.5*mV, key='w_max')
+    ref_stdp_model.modify_model('namespace', args.w_max*mV, key='w_max')
     ref_stdp_model.modify_model('parameters',
                                 sampled_weights*mV,
                                 key='w_plast')
