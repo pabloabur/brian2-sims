@@ -148,12 +148,37 @@ subparser_balance_stdp.add_argument('--precision',
                                     default='fp64',
                                     help=f'Bit precision used. Currently only supports '
                                          f'8 and 64')
+subparser_balance_stdp.add_argument('--w_max',
+                                    type=float,
+                                    default=1000,
+                                    help='Maximum value of plastic weight, in mV')
+subparser_balance_stdp.add_argument('--event_condition',
+                                    type=str,
+                                    default= 'abs(Ca) > 0',
+                                    help=f'Condition uppon a plasticity event is '
+                                         f'triggered.')
 subparser_balance_stdp.add_argument('--protocol',
                                     type=int,
                                     default=1,
                                     help=f'Type of simulation. 1 is for '
-                                         f'general statistics from spikes '
-                                         f'and 2 is for hardware-like evaluation.')
+                                         f'bimodal-like distribution '
+                                         f'and 2 is for unimodal.')
+subparser_balance_stdp.add_argument('--we',
+                                    type=float,
+                                    default=1,
+                                    help=f'Initial excitatory weight.')
+subparser_balance_stdp.add_argument('--alpha',
+                                    type=float,
+                                    default=0.1449,
+                                    help=f'Depression factor for protocol 2.')
+subparser_balance_stdp.add_argument('--tsim',
+                                    type=int,
+                                    default=200,
+                                    help=f'Simulation time.')
+subparser_balance_stdp.add_argument('--ca_decays',
+                                    type=str,
+                                    default='20*ms',
+                                    help=f'Decay values of plasticity windows.')
 subparser_balance_stdp.set_defaults(func=balanced_network_stdp)
 
 args = parser.parse_args()
