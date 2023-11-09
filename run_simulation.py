@@ -128,11 +128,26 @@ subparser_stdp.add_argument('--protocol',
                             help=f'Type of simulation. 1 is for '
                                  f'general weight changes over time '
                                  f'and 2 is for kernel.')
+subparser_stdp.add_argument('--N_post',
+                            type=int,
+                            default=1,
+                            help=f'Number of postsynaptic neurons. This '
+                                 f'is used in protocol 3 only.')
+subparser_stdp.add_argument('--tmax',
+                            type=int,
+                            default=100000,
+                            help=f'Simulation time. This is used in protocol '
+                                 f'3 only.')
 subparser_stdp.add_argument('--precision',
                             type=str,
                             default='fp64',
                             help=f'Bit precision used. Currently only supports '
                                  f'8 and 64.')
+subparser_stdp.add_argument('--w_max',
+                            type=float,
+                            default=100,
+                            help=f'Maximum weight value, in mV. Used '
+                                 f'only in protocol 3.')
 subparser_stdp.add_argument('--event_condition',
                             type=str,
                             default= 'abs(Ca) > 0.01',
