@@ -111,13 +111,14 @@ prot_id <- match(1, protocols)
 event_data <- read.csv(file.path(data_path[prot_id], 'events_spikes.csv'))
 fetches <- event_data %>%
     ggplot(aes(x=time_ms, y=num_events)) + geom_line() +
-    theme_bw() + labs(x='time (ms)', y='# Memory access')
+    theme_bw() + labs(x='time (ms)', y='# Active neurons')
 
 w_distribution <- plot_weights(data_path[prot_id], bins=19, bin_width=0.64)
 incoming_w_j0 <- plot_weights(data_path[prot_id], bins=19, bin_width=0.64, 0)
 incoming_w_j10 <- plot_weights(data_path[prot_id], bins=19, bin_width=0.64, 10000)
 
-bimodal <- (w_distribution + fetches) / (incoming_w_j0 + incoming_w_j10)
+bimodal <- (w_distribution + fetches) / (incoming_w_j0 + incoming_w_j10) +
+    plot_annotation(tag_levels='A')
 ggsave(str_replace(argv$dest, '.png', '_bimodal.png'), bimodal)
 
 df_raster <- read.csv(file.path(data_path[prot_id], 'output_spikes.csv'))
@@ -137,7 +138,7 @@ event_data <- read.csv(file.path(data_path[prot_id], 'events_spikes.csv'))
 fetches <- event_data %>%
     filter(time_ms < 195000) %>%
     ggplot(aes(x=time_ms, y=num_events)) + geom_line() +
-    theme_bw() + labs(x='time (ms)', y='# Memory access')
+    theme_bw() + labs(x='time (ms)', y='# Active neurons')
 
 w_distribution <- plot_weights(data_path[prot_id], bins=35, bin_width=.7)
 w_distribution <- w_distribution +
