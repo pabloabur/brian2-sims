@@ -8,9 +8,8 @@ class fp8CUBA(BaseSynapse):
         self.model = '''
             weight : integer
             '''
-        self.on_pre = '''
-            g_post = fp8_add(g_post, fp8_multiply(weight, w_factor))
-            '''
+        self.on_pre = ParamDict({'pre':
+            'g_post = fp8_add(g_post, fp8_multiply(weight, w_factor))'})
         self.namespace = ParamDict({
             'w_factor': 56,  # 1 in decimal
             })

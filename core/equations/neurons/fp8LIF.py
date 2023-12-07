@@ -34,7 +34,9 @@ class fp8LIF(BaseNeuron):
             Vm=Vreset;
             Vm_noise = 0*mV
             Ca = fp8_add(Ca, Ca_inc)
+            Ca = Ca + 128
             '''
+        self.events = ParamDict({'active_Ca': 'Ca > 0'})
         self.namespace = ParamDict({
             'Vthr': 127,  # 480 in decimal
             'Ca_inc': 127
