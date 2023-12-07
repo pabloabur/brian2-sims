@@ -13,10 +13,11 @@ import argparse
 from brian2 import DEFAULT_FUNCTIONS, prefs, set_device, ms
 
 from core.utils.misc import stochastic_decay, fp8_multiply, fp8_add,\
-    fp8_smaller_than, deterministic_decay
+    fp8_add_stochastic, fp8_smaller_than, deterministic_decay
 DEFAULT_FUNCTIONS.update({'stochastic_decay': stochastic_decay,
                           'fp8_multiply': fp8_multiply,
                           'fp8_add': fp8_add,
+                          'fp8_add_stochastic': fp8_add_stochastic,
                           'fp8_smaller_than': fp8_smaller_than,
                           'deterministic_decay': deterministic_decay})
 
