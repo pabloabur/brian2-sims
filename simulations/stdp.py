@@ -183,12 +183,14 @@ def stdp(args):
         post_neurons = create_neurons(N_post, neuron_model)
         ref_post_neurons = create_neurons(N_post, ref_neuron_model)
 
-        synapse_model.modify_model('parameters',
-                                   aux_w_sample(static_weight),
-                                   key='weight')
         ref_synapse_model.modify_model('parameters',
                                        static_weight*mV,
                                        key='weight')
+        # Terrible programming practive, but I need to keep previous structure
+        static_weight += 24
+        synapse_model.modify_model('parameters',
+                                   aux_w_sample(static_weight),
+                                   key='weight')
         pre_synapse = create_synapses(pre_spikegenerator,
                                       pre_neurons,
                                       synapse_model,
@@ -353,7 +355,7 @@ def stdp(args):
                                        name='ref_stdp_synapse')
 
     neurons_list = [pre_neurons, post_neurons]
-    set_hardwarelike_scheme(prefs, neurons_list, defaultclock.dt)
+    set_hardwarelike_scheme(prefs, neurons_list, defaultclock.dt, args.precision)
 
     """ ================ Setting up monitors ================ """
     spikemon_pre_neurons = SpikeMonitor(pre_neurons,

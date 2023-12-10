@@ -36,7 +36,7 @@ def generate_connection_indices(pre_size, post_size, prob_conn, seed=None,
 
     return sources, targets
 
-def set_hardwarelike_scheme(prefs, neurons, run_reg_dt):
+def set_hardwarelike_scheme(prefs, neurons, run_reg_dt, precision):
     """ Required function to set a simulation scheme similar to hardware
         proposed (see Wang et al., 2018).
         
@@ -48,12 +48,19 @@ def set_hardwarelike_scheme(prefs, neurons, run_reg_dt):
         Neurons to which run_regularly operations will be added to.
     run_reg_dt : brian2.ms
         Indicates how often neurons' run_regularly is performed.
+    precision: str
+        Data type to be used. Currently supports 'fp8' and 'fp64',
+        where each has different arithmetics to be performed.
     """
     prefs.core.network.default_schedule = ['start', 'groups', 'thresholds',
                                            'resets', 'synapses', 'end']
+    if precision == 'fp64':
+        ca_arith = 'Ca = Ca*int(Ca>0) - Ca*int(Ca<0)'
+    elif precision == 'fp8':
+        ca_arith = 'Ca = Ca*int(Ca<128) + (Ca - 128)*int(Ca>128)'
     for neu in neurons:
         neu.run_regularly(
-            'Ca = Ca*int(Ca>0) - Ca*int(Ca<0)',
+            ca_arith,
             name=f'clear_{neu.name}_spike_flag',
             dt=run_reg_dt,
             when='after_synapses',
