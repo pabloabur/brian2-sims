@@ -873,6 +873,11 @@ def fp8_add_stochastic(num1, num2, _vectorisation_idx):
         list or numpy.array: 8-bit floating point binary word in the same
         format as the input.
     """
+    try:
+        if np.any(num2==83):
+            import pdb;pdb.set_trace()
+    except:
+        import pdb;pdb.set_trace()
     unpack = False
     if isinstance(_vectorisation_idx, int):
         unpack = True
@@ -971,7 +976,7 @@ def fp8_add_stochastic(num1, num2, _vectorisation_idx):
     lfsr_len = np.empty_like(_vectorisation_idx)
     lfsr_len[:] = GUARD_WIDTH + carry
     aux_ind = magnitude_factor > 6
-    lfsr_len[aux_ind] += (magnitude_factor-6)
+    lfsr_len[aux_ind] += (magnitude_factor[aux_ind]-6)
     lfsr = np.floor(np.random.rand(len(_vectorisation_idx)) * (2**lfsr_len)).astype(int)
     round_factor = (discarded_bits + lfsr) >> lfsr_len
 

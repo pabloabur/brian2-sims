@@ -13,7 +13,7 @@ lookup_table <- data.frame(
   original_value = integer_values,
   converted_value = minifloat_values
 )
-get_converted_value <- function(original_value) {
+minifloat2decimal <- function(original_value) {
   if (original_value %in% lookup_table$original_value) {
     return(lookup_table$converted_value[lookup_table$original_value == original_value])
   } else {
@@ -25,14 +25,14 @@ df_weights <- read.csv(file.path(argv$source, 'synapse_vars.csv'))
 df_vars <- read.csv(file.path(argv$source, 'state_vars.csv'))
 
 w_trace <- df_weights %>%
-    filter(!str_detect(monitor, "ref"), variable=='w_plast')
-w_trace$value <- map_dbl(w_trace$value, get_converted_value)
+    filter(!str_detect(monitor, "ref"), variable=='w_plast', id==0)
+w_trace$value <- map_dbl(w_trace$value, minifloat2decimal)
 
 state_vars <- df_vars %>%
     filter(!str_detect(monitor, "ref"), id==0) # TODO 0?
-state_vars$value <- map_dbl(state_vars$value, get_converted_value)
+state_vars$value <- map_dbl(state_vars$value, minifloat2decimal)
 
-w_plot <- w_trace %>%
+weights <- w_trace %>%
     ggplot(aes(x=time_ms, y=value, color=monitor)) +
     geom_line() + labs(x='time (ms)', y='weight (mV)', color='STDP method')
 
