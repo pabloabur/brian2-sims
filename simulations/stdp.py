@@ -186,7 +186,7 @@ def stdp(args):
         ref_synapse_model.modify_model('parameters',
                                        static_weight*mV,
                                        key='weight')
-        # Terrible programming practive, but I need to keep previous structure
+        # Terrible programming practice, but I need to keep previous structure
         static_weight += 24
         synapse_model.modify_model('parameters',
                                    aux_w_sample(static_weight),
