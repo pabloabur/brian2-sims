@@ -18,12 +18,12 @@ class sfp8STDP(fp8CUBA):
         self.modify_model('model', '', old_expr='weight : integer')
 
         self.modify_model('on_pre',
-                          'g_post = fp8_add_stochastic(g_post, fp8_multiply(w_plast, w_factor))',
+                          'g_post = fp8_add_stochastic(g_post, fp8_multiply_stochastic(w_plast, w_factor))',
                           key='pre')
         self.on_pre = ParamDict({
                         **self.on_pre,
                         **{'stdp_fanout': '''
-                            delta_w = int(Ca_pre<128 and Ca_post>128)*fp8_multiply(eta, Ca_pre) + int(Ca_pre>128 and Ca_post<128)*(128 + fp8_multiply(eta, Ca_post))
+                            delta_w = int(Ca_pre<128 and Ca_post>128)*fp8_multiply_stochastic(eta, Ca_pre) + int(Ca_pre>128 and Ca_post<128)*(128 + fp8_multiply_stochastic(eta, Ca_post))
                             w_plast = fp8_add_stochastic(w_plast, delta_w)'''}})
         self.on_event = ParamDict({'pre': 'spike', 'stdp_fanout': 'active_Ca'})
 

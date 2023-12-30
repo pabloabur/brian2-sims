@@ -9,7 +9,7 @@ class sfp8CUBA(BaseSynapse):
             weight : integer
             '''
         self.on_pre = ParamDict({'pre':
-            'g_post = fp8_add_stochastic(g_post, fp8_multiply(weight, w_factor))'})
+            'g_post = fp8_add_stochastic(g_post, fp8_multiply_stochastic(weight, w_factor))'})
         self.namespace = ParamDict({
             'w_factor': 56,  # 1 in decimal
             })
