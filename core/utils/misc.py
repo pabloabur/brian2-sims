@@ -1139,7 +1139,7 @@ def fp8_add_stochastic(num1, num2, _vectorisation_idx):
     aux_ind = magnitude_factor > lower_factor
     aux_ind[int_repr2_abs == 0] = False
     sticky_bit = np.zeros_like(_vectorisation_idx)
-    low_prob_len = (magnitude_factor[aux_ind]-3)
+    low_prob_len = (magnitude_factor[aux_ind] - 7 + num_leading_zero[aux_ind])
     low_prob = np.floor(np.random.rand(len(low_prob_len)) * (2**low_prob_len)).astype(int)
     sticky_bit[aux_ind] = low_prob==(2**low_prob_len-1)
 
@@ -1275,7 +1275,7 @@ int fp8_add_stochastic(int num1, int num2, int _vectorisation_idx){
     }
     lower_factor = 7 - num_leading_zero;
     if (magnitude_factor>lower_factor && int_repr2_abs!=0){
-        low_prob_len = magnitude_factor - 3;
+        low_prob_len = magnitude_factor - 7 + num_leading_zero;
         low_prob = floor(rand(_vectorisation_idx) * (1 << low_prob_len));
         sticky_bit = low_prob == (1 << low_prob_len) - 1;
     } else {
