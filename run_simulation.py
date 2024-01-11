@@ -5,6 +5,7 @@ from simulations.neuron_synapse_models import neuron_synapse_models
 from simulations.stdp import stdp
 from simulations.balanced_network import balanced_network
 from simulations.balanced_network_stdp import balanced_network_stdp
+from simulations.minifloat import minifloat_operations
 
 import os
 from datetime import datetime
@@ -13,9 +14,10 @@ import argparse
 from brian2 import DEFAULT_FUNCTIONS, prefs, set_device, ms
 
 from core.utils.misc import stochastic_decay, fp8_multiply, fp8_add,\
-    fp8_add_stochastic, fp8_smaller_than, deterministic_decay
+    fp8_add_stochastic, fp8_multiply_stochastic, fp8_smaller_than, deterministic_decay
 DEFAULT_FUNCTIONS.update({'stochastic_decay': stochastic_decay,
                           'fp8_multiply': fp8_multiply,
+                          'fp8_multiply_stochastic': fp8_multiply_stochastic,
                           'fp8_add': fp8_add,
                           'fp8_add_stochastic': fp8_add_stochastic,
                           'fp8_smaller_than': fp8_smaller_than,
@@ -196,6 +198,16 @@ subparser_balance_stdp.add_argument('--ca_decays',
                                     default='20*ms',
                                     help=f'Decay values of plasticity windows.')
 subparser_balance_stdp.set_defaults(func=balanced_network_stdp)
+
+subparser_minifloat = subparsers.add_parser(
+    'minifloat',
+    formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+subparser_minifloat.add_argument('--protocol',
+                                 type=int,
+                                 help=f'Type of simulation. 1 is for '
+                                      f'multiplication and 2 is for addition.'
+                                      f' All operations are stochastic.')
+subparser_minifloat.set_defaults(func=minifloat_operations)
 
 args = parser.parse_args()
 
