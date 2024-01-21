@@ -101,6 +101,10 @@ subparser_pd.add_argument('--w_in',
 subparser_pd.add_argument('--bg_freq',
                           type=float,
                           help=f'Strength of background noise, in Hz.')
+subparser_pd.add_argument('--rounding',
+                          type=str,
+                          default='stochastic',
+                          help=f'Rounding scheme. Nearest or stochastic.')
 subparser_pd.set_defaults(func=fp8_potjans_diesmann)
 
 subparser_models = subparsers.add_parser(
