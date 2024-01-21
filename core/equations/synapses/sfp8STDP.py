@@ -24,7 +24,8 @@ class sfp8STDP(fp8CUBA):
                         **self.on_pre,
                         **{'stdp_fanout': '''
                             delta_w = int(Ca_pre<128 and Ca_post>128)*fp8_multiply_stochastic(eta, Ca_pre) + int(Ca_pre>128 and Ca_post<128)*(128 + fp8_multiply_stochastic(eta, Ca_post))
-                            w_plast = fp8_add_stochastic(w_plast, delta_w)'''}})
+                            w_plast = fp8_add_stochastic(w_plast, delta_w)
+                            w_plast = int(w_plast<128)*w_plast'''}})
         self.on_event = ParamDict({'pre': 'spike', 'stdp_fanout': 'active_Ca'})
 
         self.parameters = ParamDict({**self.parameters,

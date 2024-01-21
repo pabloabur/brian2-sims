@@ -160,6 +160,11 @@ subparser_stdp.add_argument('--event_condition',
                             default= 'abs(Ca) > 0.01',
                             help=f'Condition uppon a plasticity event is '
                                  f'triggered.')
+subparser_stdp.add_argument('--w_init',
+                            type=float,
+                            default=11,
+                            help=f'Initial value of weights. To be used only with '
+                                 f'protocol 1 that uses fp8.')
 subparser_stdp.set_defaults(func=stdp)
 
 subparser_balance_stdp = subparsers.add_parser(
