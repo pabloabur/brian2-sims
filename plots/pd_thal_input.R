@@ -15,7 +15,7 @@ include('plots/parse_inputs.R')
 color_map <- wes_palette('Moonrise1')[c(4, 2)]
 
 wd = getwd()
-dir <- Sys.glob(file.path(wd, argv$source,))
+dir <- Sys.glob(file.path(wd, argv$source))
 
 spikes <- read_feather(file.path(dir, "spikes.feather"))
 metadata <- fromJSON(file.path(dir, "metadata.json"))
