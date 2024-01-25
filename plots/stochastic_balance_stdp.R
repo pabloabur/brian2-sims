@@ -70,7 +70,7 @@ print_stats <- function(df_data, N_exc, tsim) {
 }
 
 plot_weights <- function(df_data, bin_width, subset=NULL){
-    color_map <- wes_palette('GrandBudapest1')
+    color_map <- wes_palette('FantasticFox1')
 
     ds_weights <- open_dataset(file.path(df_data, 'obj_vars.feather'),
                                format="arrow")
@@ -95,7 +95,7 @@ plot_weights <- function(df_data, bin_width, subset=NULL){
 
     w_distribution <- df_weights %>%
         ggplot(aes(x=mids, y=count)) +
-        geom_col(width=bin_width, fill=color_map[2], color=color_map[2]) + 
+        geom_col(width=bin_width, fill=color_map[1], color=color_map[1]) + 
         theme_bw() + labs(x='weights (a.u.)', y='fraction of synapses')
 
     return(w_distribution)
@@ -109,10 +109,15 @@ N_exc <- map_int(metadata, \(x) x$N_exc)
 
 state_vars <- read.csv(file.path(data_path, "output_vars.csv"))
 state_vars$value <- map_dbl(state_vars$value, minifloat2decimal)
-min_time <- 0
+min_time <- 600
 variables <- state_vars %>%
-    filter(time_ms>=min_time & time_ms<=1e3+min_time) %>%
+    filter(time_ms>=min_time & time_ms<=150+min_time) %>%
+    filter(variable != 'w_plast', id==0) %>%
+    mutate(variable = str_replace(variable, "Ca", "x")) %>%
+    mutate(variable = str_replace(variable, "g", "PSP")) %>%
     ggplot(aes(x=time_ms, y=value, color=variable)) +
+    labs(x='time (s)', y='magnitude (a.u.)') + scale_color_manual(values=color_map) +
+    guides(color=guide_legend(override.aes=list(linewidth=5))) +
     geom_line() + theme_bw()
 
 w_distribution <- plot_weights(data_path, bin_width=0.64)
@@ -121,8 +126,8 @@ incoming_w_j10 <- plot_weights(data_path, bin_width=0.64, 10000)
 
 event_data <- read.csv(file.path(data_path, 'events_spikes.csv'))
 fetches <- event_data %>%
-    ggplot(aes(x=time_ms, y=num_events)) + geom_line() +
-    theme_bw() + labs(x='time (ms)', y='# Active neurons')
+    ggplot(aes(x=time_ms, y=num_events)) + geom_line(color=color_map[1]) +
+    theme_bw() + labs(x='time (ms)', y='# active neurons')
 
 df_raster <- read.csv(file.path(data_path, 'output_spikes.csv'))
 print("Statistics with bimodal experiment: ")
@@ -146,8 +151,7 @@ freq <- bind_rows(df_rates_init, df_rates_final) %>%
         labs(x='firing rates (Hz)', y='count', fill=element_blank(), color=element_blank()) +
         scale_y_log10()
 
-fig_events <- fetches + freq + plot_annotation(tag_levels='A')
-fig_vars <- variables + w_distribution + plot_annotation(tag_levels='A')
+fig <- fetches + variables + freq + w_distribution +
+    plot_annotation(tag_levels='A')
 
-ggsave(str_replace(argv$dest, '.png', '_events.png'), fig_events)
-ggsave(str_replace(argv$dest, '.png', '_variables.png'), fig_vars)
+ggsave(argv$dest, fig)
