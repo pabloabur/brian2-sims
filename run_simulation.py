@@ -6,6 +6,7 @@ from simulations.stdp import stdp
 from simulations.balanced_network import balanced_network
 from simulations.balanced_network_stdp import balanced_network_stdp
 from simulations.minifloat import minifloat_operations
+from simulations.istdp import istdp
 
 import os
 from datetime import datetime
@@ -217,6 +218,20 @@ subparser_minifloat.add_argument('--protocol',
                                       f'multiplication and 2 is for addition.'
                                       f' All operations are stochastic.')
 subparser_minifloat.set_defaults(func=minifloat_operations)
+
+subparser_istdp = subparsers.add_parser(
+    'iSTDP',
+    formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+subparser_istdp.add_argument('--event_condition',
+                             type=str,
+                             default= 'Ca > 0',
+                             help=f'Condition uppon a plasticity event is '
+                                  f'triggered.')
+subparser_istdp.add_argument('--protocol',
+                             type=int,
+                             help=f'Type of simulation. 1 and 2 are for high '
+                                  f'and low learning rates, respectively.')
+subparser_istdp.set_defaults(func=istdp)
 
 args = parser.parse_args()
 
