@@ -42,7 +42,8 @@ freq <- rates %>%
     mutate(layer=fct_rev(layer)) %>%
     ggplot(aes(rate, layer)) + theme_bw() +
     theme(panel.grid.minor=element_blank(),
-          panel.grid.major=element_blank()) +
+          panel.grid.major=element_blank(),
+          text=element_text(size=16)) +
     labs(x='firing rates (Hz)', y=element_blank()) +
     geom_boxplot() +
     stat_summary(fun='mean', geom='point', shape=2)
@@ -123,7 +124,7 @@ histograms <- df_raster %>%
     ggplot(aes(x=t, color=type)) + geom_step(stat='bin', bins=50) +
     guides(color=guide_legend(override.aes=list(size=4))) +
     facet_grid(rows=vars(laminae), scales='free') + theme_bw() +
-    theme(legend.position = 'bottom') +
+    theme(legend.position = 'bottom', text=element_text(size=16)) +
     scale_color_manual(values=color_map[c(1, 3)]) +
     guides(color=guide_legend(override.aes=list(linewidth=5))) +
     labs(x='time (ms)') + xlim(670, 730)
@@ -136,7 +137,9 @@ variables <- state_vars %>%
     ggplot(aes(x=time_ms, y=value, color=variable)) +
     geom_line() + theme_bw() +
     facet_grid(layer ~ type, scales="free") +
-    theme(legend.position = 'bottom', strip.text.y = element_blank()) +
+    theme(legend.position = 'bottom',
+          strip.text.y = element_blank(),
+          text=element_text(size=16)) +
     labs(x='time (s)', y='magnitude (a.u.)') + scale_color_manual(values=color_map) +
     guides(color=guide_legend(override.aes=list(linewidth=5)))
 

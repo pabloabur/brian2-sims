@@ -57,7 +57,8 @@ df_events <- df_events %>%
     group_by(N_post, group) %>% mutate(mean_fetch=mean(num_fetch))
 multi_fetch_avg <- df_events %>%
     ggplot(aes(x=group, y=num_fetch)) +
-    geom_boxplot(aes(fill=group)) + theme_bw() + theme(legend.position="none") +
+    geom_boxplot(aes(fill=group)) + theme_bw() +
+    theme(legend.position="none", text=element_text(size=16)) +
     geom_point(aes(y=mean_fetch, color=group), shape=2, size=7) +
     facet_wrap(~N_post) + scale_y_log10() +
     labs(x=element_blank(), y='# Memory access') +

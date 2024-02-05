@@ -95,7 +95,8 @@ plot_weights <- function(df_data, bins, bin_width, subset=NULL){
     w_distribution <- df_weights %>%
         ggplot(aes(x=mids, y=count)) +
         geom_col(width=bin_width, fill=color_map[2], color=color_map[2]) + 
-        theme_bw() + labs(x='weights (pA)', y='fraction of synapses')
+        theme_bw() + labs(x='weights (pA)', y='fraction of synapses') +
+        theme(text=element_text(size=16))
 
     return(w_distribution)
 }
@@ -110,8 +111,10 @@ protocols <- map_int(metadata, \(x) x$protocol)
 prot_id <- match(1, protocols)
 event_data <- read.csv(file.path(data_path[prot_id], 'events_spikes.csv'))
 fetches <- event_data %>%
+    mutate(time_ms = time_ms/1000) %>%
     ggplot(aes(x=time_ms, y=num_events)) + geom_line() +
-    theme_bw() + labs(x='time (ms)', y='# Active neurons')
+    theme_bw() + labs(x='time (s)', y='# active neurons') +
+    theme(text=element_text(size=16))
 
 w_distribution <- plot_weights(data_path[prot_id], bins=19, bin_width=0.64)
 incoming_w_j0 <- plot_weights(data_path[prot_id], bins=19, bin_width=0.64, 0)
@@ -137,8 +140,10 @@ if(metadata[[prot_id[1]]]$alpha==.1449) {
 event_data <- read.csv(file.path(data_path[prot_id], 'events_spikes.csv'))
 fetches <- event_data %>%
     filter(time_ms < 195000) %>%
+    mutate(time_ms = time_ms/1000) %>%
     ggplot(aes(x=time_ms, y=num_events)) + geom_line() +
-    theme_bw() + labs(x='time (ms)', y='# Active neurons')
+    theme_bw() + labs(x='time (s)', y='# active neurons') +
+    theme(text=element_text(size=16))
 
 w_distribution <- plot_weights(data_path[prot_id], bins=35, bin_width=.7)
 w_distribution <- w_distribution +
@@ -160,7 +165,8 @@ df_rates_init$group <- 'initial'
 freq <- bind_rows(df_rates_init, df_rates_final) %>%
         ggplot(aes(x=rate, color=group, fill=group)) + theme_bw() +
         geom_histogram(alpha=.5) + scale_color_manual(values=color_map) + 
-        scale_fill_manual(values=color_map) + theme(legend.position = c(0.8, 0.8)) +
+        scale_fill_manual(values=color_map) +
+        theme(legend.position = c(0.8, 0.8), text=element_text(size=16)) +
         labs(x='firing rates (Hz)', y='count', fill=element_blank(), color=element_blank()) +
         scale_y_log10()
 

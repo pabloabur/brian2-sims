@@ -96,7 +96,8 @@ plot_weights <- function(df_data, bin_width, subset=NULL){
     w_distribution <- df_weights %>%
         ggplot(aes(x=mids, y=count)) +
         geom_col(width=bin_width, fill=color_map[1], color=color_map[1]) + 
-        theme_bw() + labs(x='weights (a.u.)', y='fraction of synapses')
+        theme_bw() + labs(x='weights (a.u.)', y='fraction of synapses') +
+        theme(text=element_text(size=16))
 
     return(w_distribution)
 }
@@ -116,9 +117,9 @@ variables <- state_vars %>%
     mutate(variable = str_replace(variable, "Ca", "x")) %>%
     mutate(variable = str_replace(variable, "g", "PSP")) %>%
     ggplot(aes(x=time_ms, y=value, color=variable)) +
-    labs(x='time (s)', y='magnitude (a.u.)') + scale_color_manual(values=color_map) +
+    labs(x='time (ms)', y='magnitude (a.u.)') + scale_color_manual(values=color_map) +
     guides(color=guide_legend(override.aes=list(linewidth=5))) +
-    geom_line() + theme_bw()
+    geom_line() + theme_bw() + theme(text=element_text(size=16))
 
 w_distribution <- plot_weights(data_path, bin_width=0.64)
 incoming_w_j0 <- plot_weights(data_path, bin_width=0.64, 0)
@@ -126,8 +127,10 @@ incoming_w_j10 <- plot_weights(data_path, bin_width=0.64, 10000)
 
 event_data <- read.csv(file.path(data_path, 'events_spikes.csv'))
 fetches <- event_data %>%
+    mutate(time_ms = time_ms/1000) %>%
     ggplot(aes(x=time_ms, y=num_events)) + geom_line(color=color_map[1]) +
-    theme_bw() + labs(x='time (ms)', y='# active neurons')
+    theme_bw() + labs(x='time (s)', y='# active neurons') +
+    theme(text=element_text(size=16))
 
 df_raster <- read.csv(file.path(data_path, 'output_spikes.csv'))
 print("Statistics with bimodal experiment: ")
@@ -146,10 +149,13 @@ df_rates_final$group <- 'final'
 df_rates_init$group <- 'initial'
 freq <- bind_rows(df_rates_init, df_rates_final) %>%
         ggplot(aes(x=rate, color=group, fill=group)) + theme_bw() +
-        geom_histogram(alpha=.5) + scale_color_manual(values=color_map) + 
-        scale_fill_manual(values=color_map) + theme(legend.position = c(0.8, 0.8)) +
-        labs(x='firing rates (Hz)', y='count', fill=element_blank(), color=element_blank()) +
-        scale_y_log10()
+        geom_histogram(alpha=.5, binwidth=1) + scale_color_manual(values=color_map) + 
+        scale_fill_manual(values=color_map) +
+        scale_x_continuous(breaks = scales::pretty_breaks(n = 4)) +
+        theme(legend.position = c(0.25, 0.8),
+              text=element_text(size=16),
+              legend.text=element_text(size=10)) +
+        labs(x='firing rates (Hz)', y='count', fill=element_blank(), color=element_blank())
 
 fig <- fetches + variables + freq + w_distribution +
     plot_annotation(tag_levels='A')

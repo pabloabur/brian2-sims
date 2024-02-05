@@ -37,7 +37,7 @@ generate_plot <- function(df, time) {
       ggplot(aes(x=id, y=value)) + geom_line(color=color_map[3]) + theme_bw() +
       labs(x=TeX(r'($\Delta$\;t (ms))'), y=element_blank(), color=element_blank()) +
       guides(color=guide_legend(override.aes=list(linewidth=4))) +
-      theme(legend.position = c(0.25, 0.8))
+      theme(legend.position = c(0.25, 0.8), text=element_text(size=16))
   return(kernel)
 }
 
@@ -61,8 +61,8 @@ kernel_small_middle <- kernel_small_middle + labs(y='weight (a.u.)')
 kernel_small_final <- generate_plot(df_weights_small, 9000)
 
 fig_kernel <- wrap_elements(kernel_high_middle + kernel_high_final +
-                            plot_annotation(title='A')) /
+                            plot_annotation(title='A', theme=theme(text=element_text(size=16)))) /
               wrap_elements(kernel_small_middle + kernel_small_final +
-                            plot_annotation(title='B'))
+                            plot_annotation(title='B', theme=theme(text=element_text(size=16))))
 
 ggsave(argv$dest, fig_kernel)

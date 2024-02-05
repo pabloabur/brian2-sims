@@ -52,18 +52,19 @@ t_final <- 250
 fetch_dist_init <- df_events %>%
     filter(time_ms > t_init & time_ms < t_final) %>%
     ggplot(aes(x=group, y=num_fetch, fill=group)) +
-    geom_boxplot(outlier.shape=NA) + theme_bw() + theme(legend.position="none") +
+    geom_boxplot(outlier.shape=NA) + theme_bw() +
+    theme(legend.position="none", text = element_text(size=16)) +
     geom_jitter(color="black", size=0.7, alpha=0.5) +
-    labs(x=element_blank(), y='# Memory access') +
+    labs(x=element_blank(), y='mems') +
     scale_fill_manual(values=color_map)
 t_init <- 0
 t_final <- 100
 trace_init <- df_events %>%
     filter(time_ms > t_init & time_ms < t_final) %>%
     ggplot(aes(x=time_ms, y=num_fetch, color=group)) + geom_line() +
-    theme(legend.position="none") + theme_bw() +
+    theme_bw() + theme(legend.position="none", text = element_text(size=16)) +
     guides(color=guide_legend(override.aes=list(linewidth=4))) +
-    labs(x='time (ms)', y='# Memory access', color='Event threshold') +
+    labs(x='time (ms)', y='mems', color='Event threshold') +
     scale_color_manual(values=color_map)
 
 t_init <- 99500
@@ -71,23 +72,25 @@ t_final <- 99750
 fetch_dist_final <- df_events %>%
     filter(time_ms > t_init & time_ms < t_final) %>%
     ggplot(aes(x=group, y=num_fetch, fill=group)) +
-    geom_boxplot(outlier.shape=NA) + theme_bw() + theme(legend.position="none") +
+    geom_boxplot(outlier.shape=NA) + theme_bw() +
+    theme(legend.position="none", text = element_text(size=16)) +
     geom_jitter(color="black", size=0.7, alpha=0.5) +
-    labs(x=element_blank(), y='# Memory access') +
+    labs(x=element_blank(), y='mems') +
     scale_fill_manual(values=color_map)
 t_init <- 99500
 t_final <- 100000
 trace_final <- df_events %>%
     filter(time_ms > t_init & time_ms < t_final) %>%
     ggplot(aes(x=time_ms, y=num_fetch, color=group)) + geom_line() +
-    theme_bw() + labs(x='time (ms)', y='# Memory access') +
+    theme_bw() + labs(x='time (ms)', y='mems') +
     scale_x_continuous(labels=c(t_init, t_final), breaks=c(t_init, t_final)) +
-    scale_color_manual(values=color_map) + theme(legend.position="none")
+    scale_color_manual(values=color_map) +
+    theme(legend.position="none", text = element_text(size=16))
 
 df_spk <- read.csv(str_replace(nth(dir_list, -1), "events_spikes.feather", "spikes_post.csv"))
 rates <- df_spk %>%
     ggplot(aes(x=time_ms)) + geom_histogram(fill=color_map[3]) + theme_bw() +
-    labs(x='time (ms)', y='# spikes')
+    labs(x='time (ms)', y='# spikes') + theme(text = element_text(size=16))
 
 n_fetch <- rates /
        (trace_init + trace_final) /

@@ -63,7 +63,8 @@ if (op_type == "addition"){
     L_heatmap <- ggplot(df_L, aes(delta, lambda, fill=L)) +
         scale_fill_gradientn(colors=color_map, name=TeX(r'($L$)')) +
         labs(x=TeX(r'($\delta$)'), y=TeX(r'($\lambda$)')) + theme_bw() + geom_tile() +
-        theme(legend.position="top")
+        theme(legend.position="top", text = element_text(size=16),
+              legend.text=element_text(angle=45))
 }
 
 my_breaks<-c(1, 10, 100, 1000)
@@ -76,7 +77,8 @@ probs_scatter <- ggplot(df_scatter, aes(x=p_round_closer_ideal, y=p_round_closer
     geom_smooth(colour='black', method=lm) + geom_bin2d(bins=25) +
     geom_abline(slope=1, intercept=0, linetype="dashed", color="black") +
     theme_bw() + labs(x=TeX(r'($P_i$)'), y=TeX(r'($P_s$)')) +
-    theme(legend.position="top")
+    theme(legend.position="top", text = element_text(size=16),
+          legend.text=element_text(angle=45))
 
 if (op_type == "addition"){
     sim_id <- match("stickier", selected_folders)
@@ -90,7 +92,7 @@ if (op_type == "addition"){
         geom_smooth(colour='black', method=lm) + geom_bin2d(bins=25) +
         geom_abline(slope=1, intercept=0, linetype="dashed", color="black") +
         theme_bw() + labs(x=TeX(r'($P_i$)'), y=TeX(r'($P_s$)')) +
-        theme(legend.position="none")
+        theme(legend.position="none", text = element_text(size=16))
 
     sim_id <- match("cutoff", selected_folders)
     df_cut <- read.csv(file.path(data_path[sim_id], "probs.csv"))
@@ -103,7 +105,7 @@ if (op_type == "addition"){
         geom_smooth(colour='black', method=lm) + geom_bin2d(bins=25) +
         geom_abline(slope=1, intercept=0, linetype="dashed", color="black") +
         theme_bw() + labs(x=TeX(r'($P_i$)'), y=TeX(r'($P_s$)')) +
-        theme(legend.position="none")
+        theme(legend.position="none", text = element_text(size=16))
 }
 
 if (op_type == "addition"){

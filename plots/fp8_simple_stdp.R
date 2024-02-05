@@ -41,10 +41,10 @@ state_vars <- df_vars %>%
     filter(!str_detect(monitor, "ref"), id==0) %>%
     mutate(monitor = str_replace(monitor,
                                  "statemon_pre_neurons",
-                                 "presynaptic neuron")) %>%
+                                 "presynaptic")) %>%
     mutate(monitor = str_replace(monitor,
                                  "statemon_post_neurons",
-                                 "postsynaptic neuron")) %>%
+                                 "postsynaptic")) %>%
     mutate(variable = str_replace(variable, "Ca", "x")) %>%
     mutate(variable = str_replace(variable, "g", "PSP"))
 state_vars$value <- map_dbl(state_vars$value, minifloat2decimal)
@@ -54,7 +54,7 @@ states_stoch <- state_vars %>%
     geom_line() + labs(x='time (ms)', y='magnitude (a.u.)', color='state variables') +
     xlim(c(363, 713)) + scale_color_manual(values=color_map[c(1, 3, 5)]) +
     guides(color=guide_legend(override.aes=list(linewidth=5))) +
-    theme(legend.position="none")
+    theme(legend.position="none", text = element_text(size=16))
 
 df_weights <- read.csv(file.path(data_path[sim_id], 'synapse_vars.csv'))
 w_trace <- df_weights %>%
@@ -71,7 +71,7 @@ weights_stoch_high <- temp_weights +
     geom_line(data=avg_weight, aes(x=time_ms, y=value),
               color=color_map[4], linewidth=1) +
     labs(x='time (ms)', y='weight (a.u.)') +
-    xlim(c(363, 1957)) + theme_bw()
+    xlim(c(363, 1957)) + theme_bw() + theme(text=element_text(size=16))
 
 selected_folder <- stoch_round & small_w
 sim_id <- match(T, selected_folder)
@@ -90,7 +90,7 @@ weights_stoch_low <- temp_weights +
     geom_line(data=avg_weight, aes(x=time_ms, y=value),
               color=color_map[4], linewidth=1) +
     labs(x='time (ms)', y='weight (a.u.)') +
-    xlim(c(363, 1957)) + theme_bw()
+    xlim(c(363, 1957)) + theme_bw() + theme(text=element_text(size=16))
 
 selected_folder <- !stoch_round & !small_w
 sim_id <- match(T, selected_folder)
@@ -100,10 +100,10 @@ state_vars <- df_vars %>%
     filter(!str_detect(monitor, "ref"), id==0) %>%
     mutate(monitor = str_replace(monitor,
                                  "statemon_pre_neurons",
-                                 "presynaptic neuron")) %>%
+                                 "presynaptic")) %>%
     mutate(monitor = str_replace(monitor,
                                  "statemon_post_neurons",
-                                 "postsynaptic neuron")) %>%
+                                 "postsynaptic")) %>%
     mutate(variable = str_replace(variable, "Ca", "x")) %>%
     mutate(variable = str_replace(variable, "g", "PSP"))
 state_vars$value <- map_dbl(state_vars$value, minifloat2decimal)
@@ -112,7 +112,8 @@ states_det <- state_vars %>%
     facet_grid(rows=vars(fct_rev(monitor)), scales="free") +
     geom_line() + labs(x='time (ms)', y='magnitude (a.u.)', color='state variables') +
     xlim(c(363, 713)) + scale_color_manual(values=color_map[c(1, 3, 5)]) +
-    guides(color=guide_legend(override.aes=list(linewidth=5)))
+    guides(color=guide_legend(override.aes=list(linewidth=5))) +
+    theme(text=element_text(size=16))
 
 df_weights <- read.csv(file.path(data_path[sim_id], 'synapse_vars.csv'))
 w_trace <- df_weights %>%
@@ -122,6 +123,7 @@ weights_det_high <- w_trace %>%
     filter(id==0) %>%
     ggplot(aes(x=time_ms, y=value, group=id)) +
     geom_line(alpha=.6, color=color_map[3]) + theme_bw() +
+    theme(text=element_text(size=16)) +
     scale_color_manual(values = color_map[3]) +
     labs(x='time (ms)', y='weight (a.u.)') +
     xlim(c(363, 1957))
@@ -137,6 +139,7 @@ weights_det_low <- w_trace %>%
     filter(id==0) %>%
     ggplot(aes(x=time_ms, y=value, group=id)) +
     geom_line(alpha=.6, color=color_map[3]) + theme_bw() +
+    theme(text=element_text(size=16)) +
     scale_color_manual(values = color_map[3]) +
     labs(x='time (ms)', y='weight (a.u.)') +
     xlim(c(363, 1957))
