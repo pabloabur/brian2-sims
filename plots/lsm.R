@@ -25,8 +25,9 @@ fig_lsm <- tbl %>%
     mutate(ic=se*qt(p=.05/2, df=num-1, lower.tail=F)) %>%
     ggplot(aes(x=size, y=mean_acc, color=precision, fill=precision)) +
     geom_line() +
-    geom_ribbon(aes(ymin=mean_acc-ic, ymax=mean_acc+ic),
-                alpha=0.3, linetype=0) +
+    geom_errorbar(aes(ymin=mean_acc-ic, ymax=mean_acc+ic), width=0) +
+    #geom_ribbon(aes(ymin=mean_acc-ic, ymax=mean_acc+ic),
+    #            alpha=0.3, linetype=0) +
     scale_color_manual(values=wes_palette('Moonrise1')[c(2, 4)]) +
     scale_fill_manual(values=wes_palette('Moonrise1')[c(2, 4)]) +
     ylim(.25, .75) + theme_bw() + guides(color="none") +

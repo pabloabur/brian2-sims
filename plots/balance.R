@@ -33,20 +33,21 @@ p1 <- rates_stats %>%
     geom_errorbar(aes(ymin=mean_freq-sd_freq, ymax=mean_freq+sd_freq)) +
     geom_line() +
     facet_wrap(vars(resolution), scales='free') +
-    theme_bw() +
+    theme_bw() + theme(text = element_text(size=16)) +
     labs(x='mean inhibitory weight (a.u.)', y='frequency (Hz)')
 
 # Chosen for convenience a not so strong inhibition
 p2 <- ggplot(vm$'16-01_11h23m35s', aes(x=time_ms, y=values, color=resolution)) +
     geom_line() + xlim(0, 0.1) + ylim(-1, 1) +
     labs(x='time (s)', y='Vm', color='Bit-precision') +
-    guides(color=guide_legend(override.aes=list(size=4))) +
-    theme_bw() + scale_color_manual(values=color_map[c(2, 4)])
+    guides(color=guide_legend(override.aes=list(linewidth=4))) +
+    theme_bw() + scale_color_manual(values=color_map[c(2, 4)]) +
+    theme(text = element_text(size=16))
 
 # Next plots were handpicked. If you dont have data, run it and choose file
 weights$'17-01_12h50m07s' <- weights$'17-01_12h50m07s' %>%
     filter(resolution=='fp64' | resolution=='fp8')
-weights$'17-01_12h50m07s'[weights$'17-01_12h50m07s'=='fp8'] = 'fp8, increased s.d.'
+weights$'17-01_12h50m07s'[weights$'17-01_12h50m07s'=='fp8'] = 'fp8*'
 weights$'16-01_11h41m10s' <- weights$'16-01_11h41m10s' %>%
     filter(resolution=='fp8')
 selected_weights <- full_join(weights$'17-01_12h50m07s', weights$'16-01_11h41m10s')
@@ -55,7 +56,9 @@ p3 <- selected_weights %>%
     ggplot(aes(values)) +
     geom_histogram(fill=color_map[[4]]) +
     facet_wrap(vars(resolution), scales='free') + 
-    theme_bw() + labs(x='inhibitory weights (a.u.)')
+    theme_bw() + labs(x='inhibitory weights (a.u.)') +
+    theme(text = element_text(size=16)) +
+    scale_x_continuous(breaks = scales::pretty_breaks(n = 4))
 
 p4 <- selected_weights  %>%
     slice_sample(n=1000) %>%
@@ -63,7 +66,8 @@ p4 <- selected_weights  %>%
     geom_qq(aes(sample=values), color=color_map[[2]]) + stat_qq_line(aes(sample=values)) +
     facet_wrap(vars(resolution), scales='free') +
     labs(x='theoretical quantiles', y='sampled quantiles') +
-    theme_bw()
+    theme_bw() + theme(text = element_text(size=16)) +
+    scale_x_continuous(breaks = scales::pretty_breaks(n = 3))
 
 fig <- (p2 / p3 / p4) + plot_annotation(tag_levels='A')
 ggsave(str_replace(argv$dest, '.png', '1.png'), p1)
