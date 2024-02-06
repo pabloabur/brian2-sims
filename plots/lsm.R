@@ -24,13 +24,13 @@ fig_lsm <- tbl %>%
     mutate(se=sd_acc/sqrt(num)) %>%
     mutate(ic=se*qt(p=.05/2, df=num-1, lower.tail=F)) %>%
     ggplot(aes(x=size, y=mean_acc, color=precision, fill=precision)) +
-    geom_line() +
+    geom_line(aes(color=precision)) +
     geom_errorbar(aes(ymin=mean_acc-ic, ymax=mean_acc+ic), width=0) +
     #geom_ribbon(aes(ymin=mean_acc-ic, ymax=mean_acc+ic),
     #            alpha=0.3, linetype=0) +
     scale_color_manual(values=wes_palette('Moonrise1')[c(2, 4)]) +
     scale_fill_manual(values=wes_palette('Moonrise1')[c(2, 4)]) +
-    ylim(.25, .75) + theme_bw() + guides(color="none") +
+    ylim(.25, .75) + theme_bw() + theme(text=element_text(size=16)) +
     labs(y='LSM mean accuracy', fill='Bit-precision')
 
 # Randomly chooses folder with data from linear SVM and ELM
@@ -41,11 +41,14 @@ fig_svm <- svm %>%
     group_by(regularization) %>%
     summarise(acc=mean(score)) %>%
     ggplot(aes(x=regularization, y=acc)) +
-    geom_line() + scale_x_log10() + theme_bw() + labs(y='SVM mean accuracy')
+    geom_line() + scale_x_log10() + theme_bw() +
+    theme(text=element_text(size=16)) + labs(y='SVM mean accuracy')
 fig_elm <- elm %>%
     group_by(size) %>%
     summarise(acc=mean(score)) %>%
     ggplot(aes(x=size, y=acc)) +
-    geom_line() + theme_bw() + labs(y='ELM mean accuracy')
+    geom_line() + theme_bw() +
+    theme(text=element_text(size=16)) + labs(y='ELM mean accuracy')
+
 fig <- (fig_lsm / (fig_svm | fig_elm)) + plot_annotation(tag_levels='A')
 ggsave(argv$dest, fig)
