@@ -27,17 +27,19 @@ def istdp(args):
     if args.protocol == 1:
         tsim = 10001*ms
     elif args.protocol == 2:
-        tsim = 60001*ms
+        tsim = 30001*ms
         neuron_model.modify_model('namespace',
                                   decimal2minifloat(1),
                                   key='Ca_inc')
         istdp_model.modify_model('parameters',
-                                 decimal2minifloat(-0.203125),
+                                 decimal2minifloat(-0.15625),
                                  key='target_rate')
 
     neuron_model.modify_model('events', args.event_condition, key='active_Ca',)
     # this results in around 5ms of refractory period
     neuron_model.modify_model('parameters', 20, key='alpha_refrac')
+    neuron_model.modify_model('parameters', 55, key='alpha_syn')
+    neuron_model.modify_model('parameters', 120, key='Iconst')
 
     num_exc = 8000
     num_inh = 2000
