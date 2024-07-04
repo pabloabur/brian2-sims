@@ -587,6 +587,215 @@ int fp8_multiply(int num1, int num2, int _vectorisation_idx){
 """
 fp8_multiply.implementations.add_implementation('cpp', cpp_code)
 
+def fp8_multiply_stochastic(num1, num2, _vectorisation_idx):
+    """ Implements an 8-bit floating point multiplication scheme with
+        stochastic rounding.
+
+    Args:
+        num1, num2 (list or numpy.array): 8-bit floating point binary word
+            with MSB bits representing polarity, 3 LSB bits representing
+            fraction, and intermediary bits representing exponent.
+    Returns:
+        list or numpy.array: 8-bit floating point binary word in the same
+        format as the input.
+    """
+    unpack = False
+    if isinstance(_vectorisation_idx, int):
+        unpack = True
+        num1 = np.array([num1])
+        num2 = np.array([num2])
+        _vectorisation_idx = np.array([_vectorisation_idx])
+
+    # Handle cases where single parameter from single object in involved with
+    # arrays
+    if isinstance(num1, int):
+        num1 = np.array([num1 for _ in _vectorisation_idx])
+    if isinstance(num2, int):
+        num2 = np.array([num2 for _ in _vectorisation_idx])
+
+    num1 = num1.astype(int)
+    num2 = num2.astype(int)
+    val1_sign, val1_exponent, val1_abs, val1_normal = extract_fields(num1)
+    val2_sign, val2_exponent, val2_abs, val2_normal = extract_fields(num2)
+    result_sign = val1_sign ^ val2_sign
+
+    # Multiplication with FRAC_WIDTH+1 LSBs. In hardware, aligning after result
+    # is obtained when subnormal values are involved gives us time to calculate
+    # multiplication and number of leading zeros in parallel.
+    int_repr1_abs = val1_normal<<FRAC_WIDTH | (val1_abs & FRAC_MASK)
+    int_repr2_abs = val2_normal<<FRAC_WIDTH | (val2_abs & FRAC_MASK)
+    result = int_repr1_abs * int_repr2_abs
+
+    # Normalization of result is done after multiplication, according
+    # to leading zeros of multiplicands. Note that if multiplicand is normal,
+    # no need to shift result e.g. 1.000*0.001=1000 => 1000<<3 = 1.000000
+    # Result occupies N_BITS bits in the form of cnr1r2...r6
+    num_leading_zero1 = get_leading_zeros(int_repr1_abs) - EXP_WIDTH
+    result = np.where(val1_normal == 0, result << num_leading_zero1, result)
+    num_leading_zero2 = get_leading_zeros(int_repr2_abs) - EXP_WIDTH
+    result = np.where(val2_normal == 0, result << num_leading_zero2, result)
+    carry = result >> (N_BITS-1)
+
+    # This represents biased exponent - 1. Implicit normal bit is added
+    # afterwards to correctly pack the result
+    result_exponent = (val1_exponent - val1_normal
+                       + val2_exponent - val2_normal
+                       - num_leading_zero1 - num_leading_zero2
+                       + (1 - BIAS) + carry)
+
+    # In hardware, a slightly larger exponent range (herein 1 extra bit) to
+    # handle subnormals
+    aux_ind = result_exponent >> EXP_WIDTH+1 != 0
+    result[aux_ind] >>= -result_exponent[aux_ind]
+    # Note that no sticky bits are computed from eliminated bits
+    result_exponent[aux_ind] = EMIN
+
+    smaller_factor = np.where(val1_abs < val2_abs, val1_abs, val2_abs)
+    aux_ind = smaller_factor == 0
+    result_exponent[aux_ind] = EMIN
+
+    trunc_result = np.empty_like(_vectorisation_idx)
+
+    discarded_bits = (result & (FRAC_MASK<<carry)) >> carry
+    lfsr = np.floor(np.random.rand(len(_vectorisation_idx)) * (2**GUARD_WIDTH)).astype(int)
+
+    # MSB of truncated result is included so that it is added to exponent,
+    # which was calculated as the final value minus 1
+    trunc_result = result >> (GUARD_WIDTH+carry)
+    round_factor = (discarded_bits+lfsr) >> GUARD_WIDTH
+    trunc_result = trunc_result + round_factor
+
+    result_abs = (result_exponent<<FRAC_WIDTH) + trunc_result
+    # Dealing with overflow. Note that sign bit is used for comparison, so no
+    # extra space would be needed in hardware
+    aux_ind = result_abs > 2**(N_BITS-1) - 1
+    result_abs[aux_ind] = 2**(N_BITS-1) - 1
+
+    # Note that negative zeros are not return from operations
+    result_sign[result_abs==0] = 0
+
+    if unpack:
+        return (result_sign[0] << EXP_WIDTH+FRAC_WIDTH) + result_abs[0]
+    else:
+        return (result_sign << EXP_WIDTH+FRAC_WIDTH) + result_abs
+fp8_multiply_stochastic = Function(fp8_multiply_stochastic, arg_units=[1, 1],
+    return_unit=1, auto_vectorise=True)
+cpp_code = """
+int fp8_multiply_stochastic(int num1, int num2, int _vectorisation_idx){
+    unsigned char sign1, exp1, abs_val1, sign2, exp2, abs_val2, smaller_factor;
+    unsigned char int_repr1_abs, int_repr2_abs, aux_int_repr, carry;
+    unsigned char num_leading_zero1=0, num_leading_zero2=0;
+    unsigned char result, result_sign, result_exp, trunc_result, result_abs;
+    unsigned char discarded_bits, lfsr, round_factor;
+    bool is_normal1, is_normal2;
+
+    const unsigned char EXP_WIDTH = 4;
+    const unsigned char FRAC_WIDTH = 3;
+    const unsigned char FRAC_MASK = (1<<FRAC_WIDTH) - 1;
+    const unsigned char SIGN_WIDTH = 1;
+    const unsigned char N_BITS = SIGN_WIDTH + EXP_WIDTH + FRAC_WIDTH;
+    const unsigned char BIAS = 7;
+    const unsigned char GUARD_WIDTH = 3;
+    const unsigned char REPR_MASK =  (1<<N_BITS) - 1;
+    // Smallest normal: 2^-(-BIAS+1)
+    // Smallest subnormal: 2^(-BIAS+1)/2^(FRAC_WIDTH-1)
+    // Biased representation of exponents, i.e. what is actually stored in hardware
+    const char EMIN = 0;
+
+    // Code to extract relevant fields of the bitstring
+    sign1 = num1 >> (EXP_WIDTH+FRAC_WIDTH);
+    abs_val1 = num1 & 0x7F;
+    exp1 = abs_val1 >> FRAC_WIDTH;
+    is_normal1 = abs_val1 >= (1 << FRAC_WIDTH);
+
+    // Code to extract relevant fields of the bitstring
+    sign2 = num2 >> (EXP_WIDTH+FRAC_WIDTH);
+    abs_val2 = num2 & 0x7F;
+    exp2 = abs_val2 >> FRAC_WIDTH;
+    is_normal2 = abs_val2 >= (1 << FRAC_WIDTH);
+
+    result_sign = sign1 ^ sign2;
+
+    // Multiplication with FRAC_WIDTH+1 LSBs. In hardware, aligning after result
+    // is obtained when subnormal values are involved gives us time to calculate
+    // multiplication and number of leading zeros in parallel.
+    int_repr1_abs = (is_normal1 << FRAC_WIDTH) | (abs_val1 & FRAC_MASK);
+    int_repr2_abs = (is_normal2 << FRAC_WIDTH) | (abs_val2 & FRAC_MASK);
+    // result occupies N_BITS bits in the form of cnr1r2...r6
+    result = int_repr1_abs * int_repr2_abs;
+
+    // Code to extract number of leading bits
+    if (int_repr1_abs==0){
+        num_leading_zero1 = N_BITS;
+    }else{
+        aux_int_repr = int_repr1_abs;
+        if(aux_int_repr<=0x0F) {aux_int_repr<<=4; num_leading_zero1+=4;}
+        if(aux_int_repr<=0x3F) {aux_int_repr<<=2; num_leading_zero1+=2;}
+        if(aux_int_repr<=0x7F) {aux_int_repr<<=1; num_leading_zero1+=1;}
+    }
+
+    // Normalization of result is done after multiplication, according
+    // to leading zeros of multiplicands. Note that if multiplicand is normal,
+    // no need to shift result e.g. 1.000*0.001=1000 => 1000<<3 = 1.000000
+    num_leading_zero1 = num_leading_zero1 - EXP_WIDTH;
+    if (!is_normal1) result <<= num_leading_zero1;
+
+    // Code to extract number of leading bits
+    if (int_repr2_abs==0){
+        num_leading_zero2 = N_BITS;
+    }else{
+        aux_int_repr = int_repr2_abs;
+        if(aux_int_repr<=0x0F) {aux_int_repr<<=4; num_leading_zero2+=4;}
+        if(aux_int_repr<=0x3F) {aux_int_repr<<=2; num_leading_zero2+=2;}
+        if(aux_int_repr<=0x7F) {aux_int_repr<<=1; num_leading_zero2+=1;}
+    }
+
+    num_leading_zero2 = num_leading_zero2 - EXP_WIDTH;
+    if (!is_normal2) result <<= num_leading_zero2;
+    carry = result >> (N_BITS-1);
+
+    // This represents biased exponent - 1. Implicit normal bit is added
+    // afterwards to correctly pack the result
+    result_exp = (exp1 - is_normal1 
+                  + exp2 - is_normal2 
+                  - num_leading_zero1 - num_leading_zero2
+                  + (1 - BIAS) + carry);
+
+    // In hardware, a slightly larger exponent range (herein 1 extra bit) to
+    // handle subnormals
+    if((result_exp >> (EXP_WIDTH + 1)) != 0){
+        result >>= -result_exp;
+        // Note that no sticky bits are computed from eliminated bits
+        result_exp = EMIN;
+    }
+
+    smaller_factor = (abs_val1 < abs_val2) ? abs_val1 : abs_val2;
+    if (smaller_factor == 0) result_exp = EMIN;
+
+    discarded_bits = (result & FRAC_MASK<<carry) >> carry;
+    lfsr = floor(rand(_vectorisation_idx) * (1 << GUARD_WIDTH));
+
+    // MSB of truncated result is included so that it is added to exponent,
+    // which was calculated as the final value minus 1
+    trunc_result = result >> (GUARD_WIDTH+carry);
+    round_factor = (discarded_bits+lfsr) >> GUARD_WIDTH;
+    trunc_result = trunc_result + round_factor;
+
+    result_abs = (result_exp<<FRAC_WIDTH) + trunc_result;
+    // Dealing with overflow. Note that sign bit is used for comparison, so no
+    // extra space would be needed in hardware
+    if (result_abs > (1 << (N_BITS-1)) - 1) result_abs = (1 << (N_BITS-1)) - 1;
+
+    // Note that negative zeros are not return from operations
+    if (result_abs==0) result_sign = 0;
+
+    return (result_sign << (EXP_WIDTH+FRAC_WIDTH)) + result_abs;
+}
+"""
+fp8_multiply_stochastic.implementations.add_implementation('cpp', cpp_code,
+    dependencies={'rand': DEFAULT_FUNCTIONS['rand'],
+                  'floor': DEFAULT_FUNCTIONS['floor']})
+
 
 def fp8_add(num1, num2, _vectorisation_idx):
     """ Implements an 8-bit floating point addition scheme. This function was
@@ -858,6 +1067,7 @@ int fp8_add(int num1, int num2, int _vectorisation_idx){
 """
 fp8_add.implementations.add_implementation('cpp', cpp_code)
 
+
 def fp8_add_stochastic(num1, num2, _vectorisation_idx):
     """ Implements an 8-bit floating point addition scheme with stochastic
         rounding. This function was created to be used in an "on_pre"
@@ -873,11 +1083,6 @@ def fp8_add_stochastic(num1, num2, _vectorisation_idx):
         list or numpy.array: 8-bit floating point binary word in the same
         format as the input.
     """
-    try:
-        if np.any(num2==83):
-            import pdb;pdb.set_trace()
-    except:
-        import pdb;pdb.set_trace()
     unpack = False
     if isinstance(_vectorisation_idx, int):
         unpack = True
@@ -928,17 +1133,15 @@ def fp8_add_stochastic(num1, num2, _vectorisation_idx):
     # equals largest exponent
     aligned_repr2 = int_repr2_abs >> magnitude_factor
 
-    # Uses sticky bit to avoid losing all bits when aligning
-    sticky_bit = np.empty_like(_vectorisation_idx)
-    # Guard bits are initialized as zero, so no bits are lost
-    sticky_bit[magnitude_factor <= GUARD_WIDTH] = 0
-    # All relevant bits were discarded, so worst case scenario is considered
-    sticky_bit[magnitude_factor >= GUARD_WIDTH+FRAC_WIDTH] = 1
-    aux_ind = ((magnitude_factor > GUARD_WIDTH)
-               & (magnitude_factor < GUARD_WIDTH+FRAC_WIDTH))
-    discarded_bits = (int_repr2_abs[aux_ind]
-                      << (N_BITS - magnitude_factor[aux_ind]))
-    sticky_bit[aux_ind] = (discarded_bits & REPR_MASK) != 0
+    # Uses stochastic bit to avoid losing all bits when aligning
+    num_leading_zero = get_leading_zeros(int_repr2_abs)
+    lower_factor = 7 - num_leading_zero
+    aux_ind = magnitude_factor > lower_factor
+    aux_ind[int_repr2_abs == 0] = False
+    sticky_bit = np.zeros_like(_vectorisation_idx)
+    low_prob_len = (magnitude_factor[aux_ind] - 7 + num_leading_zero[aux_ind])
+    low_prob = np.floor(np.random.rand(len(low_prob_len)) * (2**low_prob_len)).astype(int)
+    sticky_bit[aux_ind] = low_prob==(2**low_prob_len-1)
 
     result = int_repr1_abs + (-1)**opposite_signs * (aligned_repr2|sticky_bit)
 
@@ -946,7 +1149,6 @@ def fp8_add_stochastic(num1, num2, _vectorisation_idx):
     carry = result >> (N_BITS-1)
     trunc_result = np.empty_like(_vectorisation_idx)
     result_exponent = np.empty_like(_vectorisation_idx)
-    guard_bit = np.empty_like(_vectorisation_idx)
 
     # Note that bias exponent -1 is calculated so later on result
     # containing the implicit bit is added to it.
@@ -963,10 +1165,10 @@ def fp8_add_stochastic(num1, num2, _vectorisation_idx):
     result_exponent[aux_ind] -= num_shifts
     result[aux_ind] <<= num_shifts
 
+    discarded_bits = np.zeros_like(_vectorisation_idx)
     aux_shift = GUARD_WIDTH + carry
     trunc_result = result >> aux_shift
-    discarded_bits = ((result << N_BITS - aux_shift & REPR_MASK)
-                      >> (N_BITS - aux_shift))
+    discarded_bits = (result & (FRAC_MASK<<carry)) >> carry
 
     # Note that negative zeros are not return from operations
     aux_ind = np.logical_and(val1_abs==val2_abs, opposite_signs)
@@ -974,12 +1176,9 @@ def fp8_add_stochastic(num1, num2, _vectorisation_idx):
     result_sign[aux_ind] = 0
 
     lfsr_len = np.empty_like(_vectorisation_idx)
-    lfsr_len[:] = GUARD_WIDTH + carry
-    aux_ind = magnitude_factor > 6
-    lfsr_len[aux_ind] += (magnitude_factor[aux_ind]-6)
+    lfsr_len[:] = GUARD_WIDTH
     lfsr = np.floor(np.random.rand(len(_vectorisation_idx)) * (2**lfsr_len)).astype(int)
-    round_factor = (discarded_bits + lfsr) >> lfsr_len
-
+    round_factor = (discarded_bits+lfsr) >> GUARD_WIDTH
     trunc_result = trunc_result + round_factor
     result_abs = (result_exponent<<FRAC_WIDTH) + trunc_result
     # Dealing with overflow. Note that sign bit is used for comparison, so no
@@ -1001,13 +1200,14 @@ int fp8_add_stochastic(int num1, int num2, int _vectorisation_idx){
     unsigned char sign2, exp2, abs_val2, is_normal2;
     unsigned char magnitude_factor, aux_val;
     unsigned char int_repr1_abs, int_repr2_abs, aligned_repr2, aux_int_repr;
-    unsigned char sticky_bit, lfsr_len, lfsr, discarded_bits, round_factor;
+    unsigned char sticky_bit, low_prob_len, low_prob, lfsr, lower_factor, discarded_bits, round_factor;
     unsigned char result, result_sign, result_exp, trunc_result, result_abs;
     unsigned char carry, num_leading_zero=0, num_shifts, aux_shift;
     bool opposite_signs;
 
     const unsigned char EXP_WIDTH = 4;
     const unsigned char FRAC_WIDTH = 3;
+    const unsigned char FRAC_MASK = (1<<FRAC_WIDTH) - 1;
     const unsigned char SIGN_WIDTH = 1;
     const unsigned char N_BITS = SIGN_WIDTH + EXP_WIDTH + FRAC_WIDTH;
     const unsigned char GUARD_WIDTH = 3;
@@ -1063,17 +1263,23 @@ int fp8_add_stochastic(int num1, int num2, int _vectorisation_idx){
     // equals largest exponent
     aligned_repr2 = int_repr2_abs >> magnitude_factor;
 
-    // Uses sticky bit to avoid losing all bits when aligning.
-    // Guard bits are initialized as zero, so no bits are lost
-    if (magnitude_factor <= GUARD_WIDTH){
+    // Uses stochastic bit to avoid losing all bits when aligning.
+    // Code to extract number of leading bits
+    if (int_repr2_abs==0){
+        num_leading_zero = N_BITS;
+    }else{
+        aux_int_repr = int_repr2_abs;
+        if(aux_int_repr<=0x0F) {aux_int_repr<<=4; num_leading_zero+=4;}
+        if(aux_int_repr<=0x3F) {aux_int_repr<<=2; num_leading_zero+=2;}
+        if(aux_int_repr<=0x7F) {aux_int_repr<<=1; num_leading_zero+=1;}
+    }
+    lower_factor = 7 - num_leading_zero;
+    if (magnitude_factor>lower_factor && int_repr2_abs!=0){
+        low_prob_len = magnitude_factor - 7 + num_leading_zero;
+        low_prob = floor(rand(_vectorisation_idx) * (1 << low_prob_len));
+        sticky_bit = low_prob == (1 << low_prob_len) - 1;
+    } else {
         sticky_bit = 0;
-    } else if (magnitude_factor >= GUARD_WIDTH+FRAC_WIDTH){
-        // All relevant bits were discarded, so worst case scenario is considered
-        sticky_bit = 1;
-    } else if ((magnitude_factor > GUARD_WIDTH)
-               && (magnitude_factor < GUARD_WIDTH+FRAC_WIDTH)){
-        discarded_bits = int_repr2_abs << (N_BITS - magnitude_factor);
-        sticky_bit = (discarded_bits & REPR_MASK) != 0;
     }
     
     if (opposite_signs)
@@ -1082,6 +1288,7 @@ int fp8_add_stochastic(int num1, int num2, int _vectorisation_idx){
         result = int_repr1_abs + (aligned_repr2|sticky_bit);
 
     // Code to extract number of leading bits
+    num_leading_zero = 0;
     if (result==0){
         num_leading_zero = N_BITS;
     }else{
@@ -1110,8 +1317,7 @@ int fp8_add_stochastic(int num1, int num2, int _vectorisation_idx){
 
     aux_shift = GUARD_WIDTH + carry;
     trunc_result = result >> aux_shift;
-    discarded_bits = (((result << (N_BITS-aux_shift)) & REPR_MASK)
-                      >> (N_BITS - aux_shift));
+    discarded_bits = (result & FRAC_MASK<<carry) >> carry;
 
     // Note that negative zeros are not return from operations
     if (abs_val1==abs_val2 && opposite_signs){
@@ -1119,11 +1325,8 @@ int fp8_add_stochastic(int num1, int num2, int _vectorisation_idx){
         result_sign = 0;
     }
 
-    lfsr_len = GUARD_WIDTH + carry;
-    if (magnitude_factor > 6)
-        lfsr_len += (magnitude_factor-6);
-    lfsr = floor(rand(_vectorisation_idx) * (1 << lfsr_len));
-    round_factor = (discarded_bits+lfsr) >> lfsr_len;
+    lfsr = floor(rand(_vectorisation_idx) * (1 << GUARD_WIDTH));
+    round_factor = (discarded_bits+lfsr) >> GUARD_WIDTH;
 
     trunc_result = trunc_result + round_factor;
     result_abs = (result_exp<<FRAC_WIDTH) + trunc_result;
@@ -1138,7 +1341,6 @@ int fp8_add_stochastic(int num1, int num2, int _vectorisation_idx){
 fp8_add_stochastic.implementations.add_implementation('cpp', cpp_code,
     dependencies={'rand': DEFAULT_FUNCTIONS['rand'],
                   'floor': DEFAULT_FUNCTIONS['floor']})
-
 
 def fp8_smaller_than(num1, num2, _vectorisation_idx):
     if isinstance(_vectorisation_idx, int):

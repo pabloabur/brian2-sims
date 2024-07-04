@@ -12,12 +12,12 @@ class sfp8LIF(BaseNeuron):
             # Prevents negative current to bring voltage below rest
             forbidden_cond = fp8_smaller_than(summed_decay, Vrest) * int(not_refractory) : integer
             summed_decay = fp8_add_stochastic(decay_term, gtot*int(not_refractory)) : integer
-            decay_term = fp8_multiply(Vm, alpha)*int(not_refractory) + fp8_multiply(Vm, alpha_refrac)*int(not not_refractory) : integer
+            decay_term = fp8_multiply_stochastic(Vm, alpha)*int(not_refractory) + fp8_multiply_stochastic(Vm, alpha_refrac)*int(not not_refractory) : integer
             gtot = fp8_add_stochastic(g, Iconst) : integer
 
-            dg/dt = fp8_multiply(g, alpha_syn)/second : 1
+            dg/dt = fp8_multiply_stochastic(g, alpha_syn)/second : 1
 
-            dCa/dt = fp8_multiply(Ca, alpha_ca)/second : 1
+            dCa/dt = fp8_multiply_stochastic(Ca, alpha_ca)/second : 1
 
             Iconst : integer
             Vm_noise : volt

@@ -27,7 +27,7 @@ ca_traces <- ggplot() +
     geom_histogram(data=df_pre_events, aes(x=time_ms), fill=color_map[2],
                    alpha=0.3, binwidth=1) +
     labs(x=element_blank(), y=TeX(r'($x_i$ (a.u))')) +
-    theme_bw() + theme(panel.grid.minor=element_blank())
+    theme_bw() + theme(panel.grid.minor=element_blank(), text = element_text(size=16))
 
 df_post_ca_trace <- df_vars %>%
     filter(id==0) %>%
@@ -35,7 +35,8 @@ df_post_ca_trace <- df_vars %>%
     filter(time_ms>690 & time_ms<890) %>%
     ggplot(aes(x=time_ms, y=value)) +
     labs(x='time (ms)', y=TeX(r'($x_j$ (a.u))')) +
-    theme_bw() + theme(panel.grid.minor=element_blank()) + geom_line()
+    theme_bw() + theme(panel.grid.minor=element_blank(), text = element_text(size=16)) +
+    geom_line()
 
 b_rang <- c(0, 310, 420, 720, 800, 1110, 1210, 1510, 1610, 2010, 2080, 2320)
 w_trace <- df_weights %>%
@@ -57,7 +58,8 @@ w_trace <- df_weights %>%
     annotate(geom='text', x=b_rang[6] - (b_rang[6]-b_rang[5])/2, y=11.2, label='III') +
     annotate(geom='text', x=b_rang[8] - (b_rang[8]-b_rang[7])/2, y=11.2, label='IV') +
     annotate(geom='text', x=b_rang[10] - (b_rang[10]-b_rang[9])/2, y=11.2, label='V') +
-    annotate(geom='text', x=b_rang[12] - (b_rang[12]-b_rang[11])/2, y=11.2, label='VI')
+    annotate(geom='text', x=b_rang[12] - (b_rang[12]-b_rang[11])/2, y=11.2, label='VI') +
+    theme(text = element_text(size=16))
 
 # Mean is taken over all connections, i.e. id
 mse_w <- df_weights %>%
@@ -68,10 +70,12 @@ mse_w <- df_weights %>%
     group_by(time_ms) %>%
     summarise(mse = mean(squared_error)) %>%
     ggplot(aes(x=time_ms, y=mse)) + labs(x='time (ms)', y='mean squared error') +
-    geom_line() + theme_bw() + theme(panel.grid.minor=element_blank())
+    geom_line() + theme_bw() +
+    theme(panel.grid.minor=element_blank(), text = element_text(size=16)) +
+    scale_x_continuous(breaks = scales::pretty_breaks(n = 3))
     
-w_changes <- wrap_elements(w_trace + plot_annotation(title='A')) / 
-    (wrap_elements(mse_w + plot_annotation(title='B')) +
-     wrap_elements(ca_traces / df_post_ca_trace + plot_annotation(title='C')))
+w_changes <- wrap_elements(w_trace + plot_annotation(title='A', theme=theme(text=element_text(size=16)))) / 
+    (wrap_elements(mse_w + plot_annotation(title='B', theme=theme(text=element_text(size=16)))) +
+     wrap_elements(ca_traces / df_post_ca_trace + plot_annotation(title='C', theme=theme(text=element_text(size=16)))))
 
 ggsave(argv$dest, w_changes)

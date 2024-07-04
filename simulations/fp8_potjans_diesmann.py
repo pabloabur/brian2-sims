@@ -13,12 +13,15 @@ import json
 
 import gc
 
+from core.equations.neurons.sfp8LIF import sfp8LIF
+from core.equations.synapses.sfp8CUBA import sfp8CUBA
 from core.equations.neurons.fp8LIF import fp8LIF
 from core.equations.synapses.fp8CUBA import fp8CUBA
 from core.builder.groups_builder import create_synapses, create_neurons
 from core.utils.misc import decimal2minifloat
-from core.utils.prepare_models import generate_connection_indices
-
+from core.utils.prepare_models import generate_connection_indices,\
+    set_hardwarelike_scheme
+from core.utils.process_responses import statemonitors2dataframe
 
 def fp8_potjans_diesmann(args):
     if args.protocol == 1:
@@ -62,7 +65,10 @@ def fp8_potjans_diesmann(args):
     delay_in = .8
 
     """ =============== Neuron definitions =============== """
-    neu_model = fp8LIF()
+    if args.rounding == 'stochastic':
+        neu_model = sfp8LIF()
+    else:
+        neu_model = fp8LIF()
     neu_model.modify_model('parameters', '43', key='alpha_syn')
     neurons = create_neurons(N, neu_model)
     sampled_var = np.clip(rng.normal(448, 10, N), 0, 480)
@@ -92,7 +98,10 @@ def fp8_potjans_diesmann(args):
             if nsyn < 1:
                 pass
             else:
-                syn_model = fp8CUBA()
+                if args.rounding == 'stochastic':
+                    syn_model = sfp8CUBA()
+                else:
+                    syn_model = fp8CUBA()
                 syn_model.modify_model('connection', pre_index, key='i')
                 syn_model.modify_model('connection', post_index, key='j')
                 con.append(create_synapses(pop[c], pop[r], syn_model))
@@ -141,7 +150,10 @@ def fp8_potjans_diesmann(args):
 
     bg_in = []
     poisson_pop = []
-    syn_model = fp8CUBA()
+    if args.rounding == 'stochastic':
+        syn_model = sfp8CUBA()
+    else:
+        syn_model = fp8CUBA()
     syn_model.connection['p'] = .03
     for r in range(0, 8):
         poisson_pop.append(PoissonGroup(bg_layer[r], rates=args.bg_freq*Hz))
@@ -168,10 +180,18 @@ def fp8_potjans_diesmann(args):
             syn_model.modify_model('connection', targets, key='j')
             thal_con.append(create_synapses(thal_input, pop[r], syn_model))
 
+    # Required to emulate hardware
+    set_hardwarelike_scheme(prefs, [neurons], defaultclock.dt,
+                            'fp8')
+
     ###########################################################################
     # Creating spike monitors
     ###########################################################################
     smon_net = SpikeMonitor(neurons)
+    mon_vars = StateMonitor(neurons,
+                            variables=['Vm', 'Ca', 'g'],
+                            record=[nn_cum[x] for x in range(8)],
+                            name='neu_state_variables')
 
     """ ==================== Running ===================== """
     net = Network(collect())
@@ -220,9 +240,13 @@ def fp8_potjans_diesmann(args):
                                  right=False)
     feather.write_dataframe(spk_neuron, args.save_path + 'spikes.feather')
 
+    output_vars = statemonitors2dataframe([mon_vars])
+    feather.write_dataframe(output_vars, f'{args.save_path}/synapse_vars.feather')
+
     Metadata = {'dt': str(defaultclock.dt),
                 'duration': str(tsim*second),
                 'mean_inh_w': str(args.w_in),
+                'protocol': args.protocol,
                 'background_rate': str(args.bg_freq)}
     with open(args.save_path + 'metadata.json', 'w') as f:
         json.dump(Metadata, f)

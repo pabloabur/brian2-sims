@@ -103,7 +103,7 @@ def stimuli_protocol1():
 
 
 def stimuli_protocol2():
-    trials = 20
+    trials = 60
     trial_duration = 60
     N = trial_duration
     wait_time = 2*trial_duration  # delay to avoid interferences
@@ -167,11 +167,20 @@ def stdp(args):
         pre_spikegenerator, post_spikegenerator, tmax = stimuli_protocol1()
         w_mon_dt = defaultclock.dt
 
-        N_pre, N_post = 10, 10
-        n_conns = N_pre
-        sampled_weights = [11 for _ in range(n_conns)]
-        static_weight = 120
+        # for stochastic case, more neurons are necessary for average
         conn_condition = 'i==j'
+        if args.precision == 'fp8':
+            N_pre, N_post = 100, 100
+            n_conns = N_pre
+            static_weight = 176
+            w_init = args.w_init
+            sampled_weights = [w_init for _ in range(n_conns)]
+        else:
+            N_pre, N_post = 10, 10
+            n_conns = N_pre
+            static_weight = 120
+            w_init = 11
+            sampled_weights = [w_init for _ in range(n_conns)]
 
         ref_neuron_model.modify_model('model',
                                       'gtot = gtot0 + gtot1',
@@ -186,8 +195,7 @@ def stdp(args):
         ref_synapse_model.modify_model('parameters',
                                        static_weight*mV,
                                        key='weight')
-        # Terrible programming practive, but I need to keep previous structure
-        static_weight += 24
+
         synapse_model.modify_model('parameters',
                                    aux_w_sample(static_weight),
                                    key='weight')
@@ -225,16 +233,21 @@ def stdp(args):
         N_pre, N_post = N, N
         n_conns = N
         conn_condition = 'i==j'
-        sampled_weights = [50 for _ in range(n_conns)]
+        w_init = args.w_init
+        sampled_weights = [w_init for _ in range(n_conns)]
 
         # TODO for fp8? The idea is to inject current so neurons spikes, but maybe I dont have to
         #neuron_model.modify_model(
         #    'model',
         #    'summed_decay = tapre(t, i)',
         #    old_expr='summed_decay = fp8_add(decay_term, gtot*int(not_refractory))')
+        if args.precision == 'fp8':
+            old_expr = 'Vm == Vthr'
+        else:
+            old_expr = 'Vm > Vthr'
         neuron_model.modify_model('threshold',
                                   'tapre(t, i) == 1',
-                                  old_expr='Vm > Vthr')
+                                  old_expr=old_expr)
         ref_neuron_model.modify_model('threshold',
                                       'tapre(t, i) == 1',
                                       old_expr='Vm > Vthr')
@@ -263,7 +276,8 @@ def stdp(args):
         N_pre = 1000
         N_post = args.N_post
         n_conns = N_pre
-        sampled_weights = 0.3 # rng.gamma(1, 17.5, n_conns)
+        w_init = 0.3
+        sampled_weights = w_init # rng.gamma(1, 17.5, n_conns)
         tmax = args.tmax * ms
         conn_condition = None
         w_mon_dt = 1000 * ms
@@ -411,7 +425,9 @@ def stdp(args):
 
     """ =================== Saving data =================== """
     metadata = {'event_condition': args.event_condition,
-                'N_post': N_post
+                'N_post': N_post,
+                'stochastic_rounding': True,
+                'w_init': w_init
                 }
     with open(f'{args.save_path}/metadata.json', 'w') as f:
         json.dump(metadata, f)
