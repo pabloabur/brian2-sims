@@ -1,7 +1,7 @@
 [![Docker Image CI](https://github.com/pabloabur/brian2-sims/actions/workflows/docker-image.yml/badge.svg)](https://github.com/pabloabur/brian2-sims/actions/workflows/docker-image.yml)
 
 # brian2-sims
-First, build a container with 
+First, you must have [Docker](https://www.docker.com/) installed on your system. Then, build a container with 
 
 ```
 docker build -t app .
@@ -19,7 +19,7 @@ The available simulations and their options will be printed, so you can run a si
 docker run -it --rm app models
 ```
 
-You might have to change permission for the volume that will be mounted (e.g. `chmod -R +2 brian2-sims`), as some simulations generate and save files. A more convinient approach is to work with a docker volume (see `docker volume --help`).
+You might have to change permission for the volume that will be mounted (e.g. `chmod -R +2 brian2-sims`), as some simulations generate and save files. A more convenient approach is to work with a docker volume (see `docker volume --help`).
 
 The docker images were tagged and pushed to dockerhub, so you can also pull the image with `docker pull pabloabur/app` and run this image as shown above. Note that --gpu and --entrypoint flags can be used for using GPUs and probing the container, respectively. However, running with GPU support might require nvidia-container-toolkit. Similarly, you can use singularity to pull the image from dockerhub and run it (e.g. `singularity run --bind $(pwd)/sim_data:/app/sim_data --nv app_latest.sif --backend cuda_standalone --save_path sim_data/bal_stdp balance_stdp`).
 
