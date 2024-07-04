@@ -135,3 +135,6 @@ dmypy.json
 tags
 sim_data/
 code/
+tv_r.log
+tv.log
+tv.conf

@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 spks = []
-with open('spikes.csv', newline='') as f:
+with open('../datasets/spikes.csv', newline='') as f:
     reader = csv.reader(f)
     for row in reader:
         spks.append(row)
